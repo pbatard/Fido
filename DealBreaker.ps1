@@ -16,7 +16,30 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Load Assembly and Library
+# Custom Assembly Types
+$code = @'
+[DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true, BestFitMapping = false, ThrowOnUnmappableChar = true)]
+	internal static extern IntPtr LoadLibrary(string lpLibFileName);
+[DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true, BestFitMapping = false, ThrowOnUnmappableChar = true)]
+	internal static extern int LoadString(IntPtr hInstance, uint wID, StringBuilder lpBuffer, int nBufferMax);
+
+	// Returns a localized MUI string from the specified DLL
+	public static string GetMuiString(string dll, uint index)
+	{
+		int MAX_PATH = 255;
+		string muiPath = Environment.SystemDirectory + @"\" + CultureInfo.CurrentUICulture.Name + @"\" + dll + ".mui";
+		if (!File.Exists(muiPath))
+			muiPath = Environment.SystemDirectory + @"\en-US\" + dll + ".mui";
+		IntPtr hMui = LoadLibrary(muiPath);
+		if (hMui == null)
+				return "";
+		StringBuilder szString = new StringBuilder(MAX_PATH);
+		LoadString(hMui, (uint)index, szString, MAX_PATH);
+		return szString.ToString();
+	}
+'@
+
+Add-Type -MemberDefinition $code -Namespace Mui -UsingNamespace "System.IO", "System.Text", "System.Globalization" -Name Utils -ErrorAction Stop
 Add-Type -AssemblyName PresentationFramework
 
 # Input parameters
@@ -154,7 +177,6 @@ $Confirm.add_click({
 				if (-not $SessionId) {
 					throw "Could not read Session ID"
 				}
-				Write-Host "Session ID: $SessionId"
 			}
 			catch {
 				Write-Host $_.Exception.Message
@@ -314,16 +336,21 @@ $Confirm.add_click({
 })
 
 # We need a job in the background to close the obnoxious Windows "Do you want to accept this cookie" alerts
-$CloseStuff = {
+$ClosePrompt = {
+	param($PromptTitle)
 	while ($True) {
-		# TODO: We need to get this string from urlmon.dll.mui
-		Get-Process | Where-Object { $_.MainWindowTitle -match "Windows Security Warning" } | ForEach-Object { $_.CloseMainWindow() }
+		Get-Process | Where-Object { $_.MainWindowTitle -match $PromptTitle } | ForEach-Object { $_.CloseMainWindow() }
 		Start-Sleep -Milliseconds 200
 	}
 }
-$job = Start-Job -ScriptBlock $CloseStuff
+# Get the localized version of the 'Windows Security Warning' title of the cookie prompt
+$SecurityWarningTitle = [Mui.Utils]::GetMuiString("urlmon.dll", 2070)
+if (-not $SecurityWarningTitle) {
+	$SecurityWarningTitle = "Windows Security Warning"
+}
+$Job = Start-Job -ScriptBlock $ClosePrompt -ArgumentList $SecurityWarningTitle
 
 # Display the dialog
 $null = $XMLForm.ShowDialog()
 
-Stop-Job -Job $job
+Stop-Job -Job $Job
