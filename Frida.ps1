@@ -1,6 +1,7 @@
 #
-# DealBreaker - Windows retail ISO download link generator
+# Frida - The Full Retail ISO Download Application
 # Copyright © 2019 Pete Batard <pete@akeo.ie>
+# ConvertTo-ImageSource: Copyright © 2016 Chris Carter
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,12 +17,28 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+# Parameters
+param(
+	# (Optional) Name of a pipe the download URL should be sent to.
+	# If not provided, a browser window is opened instead.
+	[string]$PipeName,
+	# (Optional) Name of the perferred locale to use for the UI (e.g. "en-US", "fr-FR")
+	# If not provided, the current Windows UI locale is used.
+	[string]$Locale = [System.Globalization.CultureInfo]::CurrentUICulture.Name,
+	# (Optional) Path to the file that should be used for the UI icon.
+	[string]$Icon,
+	# (Optional) The title to display on the application window
+	[string]$AppTitle = "Frida - Full Retail ISO Downloads"
+)
+
 # Custom Assembly Types
-$code = @'
+$code = @"
 [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true, BestFitMapping = false, ThrowOnUnmappableChar = true)]
 	internal static extern IntPtr LoadLibrary(string lpLibFileName);
 [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true, BestFitMapping = false, ThrowOnUnmappableChar = true)]
 	internal static extern int LoadString(IntPtr hInstance, uint wID, StringBuilder lpBuffer, int nBufferMax);
+[DllImport("Shell32.dll", CharSet = CharSet.Auto, SetLastError = true, BestFitMapping = false, ThrowOnUnmappableChar = true)]
+	internal static extern int ExtractIconEx(string sFile, int iIndex, out IntPtr piLargeVersion, out IntPtr piSmallVersion, int amountIcons);
 
 	// Returns a localized MUI string from the specified DLL
 	public static string GetMuiString(string dll, uint index)
@@ -37,13 +54,22 @@ $code = @'
 		LoadString(hMui, (uint)index, szString, MAX_PATH);
 		return szString.ToString();
 	}
-'@
 
-Add-Type -MemberDefinition $code -Namespace Mui -UsingNamespace "System.IO", "System.Text", "System.Globalization" -Name Utils -ErrorAction Stop
+	// Extract an icon from a DLL
+	public static Icon ExtractIcon(string file, int number, bool largeIcon)
+	{
+		IntPtr large, small;
+		ExtractIconEx(file, number, out large, out small, 1);
+		try {
+			return Icon.FromHandle(largeIcon ? large : small);
+		} catch {
+			return null;
+		}
+	}
+"@
+
+Add-Type -MemberDefinition $code -Namespace Gui -UsingNamespace "System.IO", "System.Text", "System.Drawing", "System.Globalization" -ReferencedAssemblies System.Drawing -Name Utils -ErrorAction Stop
 Add-Type -AssemblyName PresentationFramework
-
-# Input parameters
-$Language = "en-US"
 
 # Data
 $WindowsVersions = @(
@@ -100,7 +126,7 @@ function Add-Title([string]$Name)
 	$Title.HorizontalAlignment = "Left"
 	$Title.VerticalAlignment = "Top"
 	$Margin = $WindowsVersionTitle.Margin
-	$Margin.Top += $script:stage * $script:dh
+	$Margin.Top += $script:Stage * $script:dh
 	$Title.Margin = $Margin
 	$Title.Text = $Name
 	return $Title
@@ -115,17 +141,59 @@ function Add-Combo
 	$Combo.HorizontalAlignment = "Left"
 	$Combo.VerticalAlignment = "Top"
 	$Margin = $WindowsVersion.Margin
-	$Margin.Top += $script:stage * $script:dh
+	$Margin.Top += $script:Stage * $script:dh
 	$Combo.Margin = $Margin
 	$Combo.SelectedIndex = 0
 	return $Combo
 }
 
+function Send-Message([string]$PipeName, [string]$Message)
+{
+	[System.Text.Encoding]$Encoding = [System.Text.Encoding]::UTF8
+	$Pipe = New-Object -TypeName System.IO.Pipes.NamedPipeClientStream -ArgumentList ".", $PipeName, ([System.IO.Pipes.PipeDirection]::Out), ([System.IO.Pipes.PipeOptions]::None), ([System.Security.Principal.TokenImpersonationLevel]::Impersonation)
+	try {
+		$Pipe.Connect(1000)
+	} catch {
+		Write-Host $_.Exception.Message
+	}
+	$bRequest = $Encoding.GetBytes($Message)
+	$cbRequest = $bRequest.Length;
+	$Pipe.Write($bRequest, 0, $cbRequest);
+	$Pipe.Dispose()
+}
+
+# From https://www.powershellgallery.com/packages/IconForGUI/1.5.2
+# Copyright © 2016 Chris Carter. All rights reserved.
+# License: https://creativecommons.org/licenses/by-sa/4.0/
+function ConvertTo-ImageSource
+{
+	[CmdletBinding()]
+	Param(
+		[Parameter(Mandatory=$true,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
+		[System.Drawing.Icon]$Icon
+	)
+
+	Process {
+		foreach ($i in $Icon) {
+			[System.Windows.Interop.Imaging]::CreateBitmapSourceFromHIcon(
+				$i.Handle,
+				(New-Object System.Windows.Int32Rect -Args 0,0,$i.Width, $i.Height),
+				[System.Windows.Media.Imaging.BitmapSizeOptions]::FromEmptyOptions()
+			)
+		}
+	}
+}
+
+function Exit-App([int]$ExitCode)
+{
+	$script:ExitCode = $ExitCode
+	Get-Process -Id $pid | Foreach-Object { $_.CloseMainWindow() | Out-Null }
+}
+
 # XAML Form
-# TODO: Use relative extracted icon 
 # TODO: Add FlowDirection = "RightToLeft" to <Window> for RTL mode
 [xml]$Form = @"
-<Window xmlns = "http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title = "Windows ISO Download" Height = "162" Width = "380" ResizeMode = "NoResize" Icon="C:/rufus/res/icons/rufus.ico">
+<Window xmlns = "http://schemas.microsoft.com/winfx/2006/xaml/presentation" Height = "162" Width = "380" ResizeMode = "NoResize">
 	<Grid Name = "Grid">
 		<TextBlock Name = "WindowsVersionTitle" FontSize = "16" Width="340" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="16,8,0,0" Text="Windows Version"/>
 		<ComboBox Name = "WindowsVersion" FontSize = "14" Height = "24" Width = "340" HorizontalAlignment = "Left" VerticalAlignment="Top" Margin = "14,34,0,0" SelectedIndex = "0"/>
@@ -137,16 +205,29 @@ function Add-Combo
 # Globals
 $dh = 58;
 $Stage = 0
+$MaxStage = 4
 $SessionId = ""
+$Url = ""
+$ExitCode = 0
 
 $XMLReader = New-Object System.Xml.XmlNodeReader $Form
 $XMLForm = [Windows.Markup.XamlReader]::Load($XMLReader)
+# Set application settings (icon, title, RTL mode)
+$XMLForm.Title = $AppTitle
+if ($Icon) {
+	$XMLForm.Icon = $Icon
+} else {
+	$XMLForm.Icon = [Gui.Utils]::ExtractIcon("shell32.dll", -262, $true) | ConvertTo-ImageSource
+}
+if ($Locale.StartsWith("ar-") -or  $Locale.StartsWith("fa-") -or $Locale.StartsWith("he-")) {
+	$XMLForm.FlowDirection = "RightToLeft"
+}
 $XMLGrid = $XMLForm.FindName("Grid")
-$Confirm = $XMLForm.FindName('Confirm')
+$Confirm = $XMLForm.FindName("Confirm")
 
 # Populate in the Windows Version dropdown
-$WindowsVersionTitle = $XMLForm.FindName('WindowsVersionTitle')
-$WindowsVersion = $XMLForm.FindName('WindowsVersion')
+$WindowsVersionTitle = $XMLForm.FindName("WindowsVersionTitle")
+$WindowsVersion = $XMLForm.FindName("WindowsVersion")
 $array = @()
 $i = 0
 foreach($Version in $WindowsVersions) {
@@ -154,14 +235,13 @@ foreach($Version in $WindowsVersions) {
 	$i++
 }
 $WindowsVersion.ItemsSource = $array
-$WindowsVersion.DisplayMemberPath = 'Version'
+$WindowsVersion.DisplayMemberPath = "Version"
 
 # Button Action
 $Confirm.add_click({
-	if ($Stage -gt 4) {
+	if ($script:Stage++ -gt $MaxStage) {
 		return
 	}
-	$script:Stage++
 
 	switch ($Stage) {
 
@@ -172,17 +252,15 @@ $Confirm.add_click({
 			$Confirm.Dispatcher.Invoke("Render", [Windows.Input.InputEventHandler] { $Confirm.UpdateLayout() }, $null, $null)
 
 			try {
-				$r = Invoke-WebRequest -SessionVariable 'Session' "https://www.microsoft.com/en-us/software-download/windows10ISO/"
+				$r = Invoke-WebRequest -SessionVariable "Session" "https://www.microsoft.com/en-us/software-download/windows10ISO/"
 				$script:SessionId = $r.ParsedHtml.IHTMLDocument3_GetElementById("session-id").Value
 				if (-not $SessionId) {
 					throw "Could not read Session ID"
 				}
-			}
-			catch {
+			} catch {
 				Write-Host $_.Exception.Message
 				$UserInput = [System.Windows.MessageBox]::Show("Error: " + $_.Exception.Message, "Error", "OK", "Error")
-				# TODO: Don't use exit but set a global and close the dialog gracefully
-				exit 1
+				Exit-App($Stage)
 			}
 			$script:WindowsReleaseTitle = Add-Title($WindowsVersion.SelectedValue.Version + " Release")
 			$script:WindowsRelease = Add-Combo
@@ -228,8 +306,8 @@ $Confirm.add_click({
 			$Confirm.Dispatcher.Invoke("Render", [Windows.Input.InputEventHandler] { $Confirm.UpdateLayout() }, $null, $null)
 			$LanguageTitle = Add-Title("Language")
 			$script:Language = Add-Combo
-			# Get the Product Edition
 
+			# Get the Product Edition
 			$url = "https://www.microsoft.com/en-us/api/controls/contentinclude/html"
 			$url += "?pageId=a8f8f489-4c7f-463a-9ca6-5cff94d8d041"
 			$url += "&host=www.microsoft.com"
@@ -251,11 +329,10 @@ $Confirm.add_click({
 				if ($array.Length -eq 0) {
 					throw "Could not parse languages"
 				}
-			}
-			catch {
+			} catch {
 				Write-Host $_.Exception.Message
 				$UserInput = [System.Windows.MessageBox]::Show("Error: " + $_.Exception.Message, "Error", "OK", "Error")
-				exit 3
+				Exit-App($Stage)
 			}
 			$Language.ItemsSource = $array
 			$Language.DisplayMemberPath = "Language"
@@ -301,14 +378,13 @@ $Confirm.add_click({
 					$array += @(New-Object PsObject -Property @{ Type = $Type; Link = $Link })
 				}
 				if ($array.Length -eq 0) {
-					throw "Could not fetch download links"
 					Write-Host $r.ParsedHtml.body.innerText
+					throw "Could not retreive ISO download links"
 				}
-			}
-			catch {
+			} catch {
 				Write-Host $_.Exception.Message
 				$UserInput = [System.Windows.MessageBox]::Show("Error: " + $_.Exception.Message, "Error", "OK", "Error")
-				exit 4
+				Exit-App($Stage)
 			}
 			# TODO: Select Arch that matches current host
 			$Arch.ItemsSource = $array
@@ -322,17 +398,16 @@ $Confirm.add_click({
 		5 { # Arch selection => Return selected download link
 			$Arch.IsEnabled = $False
 			$Confirm.IsEnabled = $False
-			Write-Host $Arch.SelectedValue.Link
+			$script:Url = $Arch.SelectedValue.Link
 		}
 	}
 
-	if ($Stage -lt 5) {
+	if ($Stage -lt ($MaxStage + 1)) {
 		$XMLForm.Height += $dh;
 		$Margin = $Confirm.Margin
 		$Margin.Top += $dh
 		$Confirm.Margin = $Margin
 	}
-
 })
 
 # We need a job in the background to close the obnoxious Windows "Do you want to accept this cookie" alerts
@@ -344,7 +419,7 @@ $ClosePrompt = {
 	}
 }
 # Get the localized version of the 'Windows Security Warning' title of the cookie prompt
-$SecurityWarningTitle = [Mui.Utils]::GetMuiString("urlmon.dll", 2070)
+$SecurityWarningTitle = [Gui.Utils]::GetMuiString("urlmon.dll", 2070)
 if (-not $SecurityWarningTitle) {
 	$SecurityWarningTitle = "Windows Security Warning"
 }
@@ -353,4 +428,14 @@ $Job = Start-Job -ScriptBlock $ClosePrompt -ArgumentList $SecurityWarningTitle
 # Display the dialog
 $null = $XMLForm.ShowDialog()
 
+# Clean up & exit
 Stop-Job -Job $Job
+if ($Url) {
+	if ($PipeName) {
+		Send-Message -PipeName $PipeName -Message $Url
+	} else {
+		Write-Host $Url
+		Start-Process -FilePath $Url
+	}
+}
+exit $ExitCode
