@@ -1,4 +1,4 @@
-#
+﻿#
 # Frida - The Full Retail ISO Download Application
 # Copyright © 2019 Pete Batard <pete@akeo.ie>
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
@@ -17,6 +17,9 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+# NB: You need a BOM on your .ps1 if you want Powershell to actually
+# realise it should use Unicode for the UI controls and not ISO-8859-1
+
 # Parameters
 param(
 	# (Optional) Name of a pipe the download URL should be sent to.
@@ -28,8 +31,11 @@ param(
 	# (Optional) Path to the file that should be used for the UI icon.
 	[string]$Icon,
 	# (Optional) The title to display on the application window
-	[string]$AppTitle = "Frida - Full Retail ISO Downloads"
+	[string]$AppTitle = "Frida - Full Retail ISO Downloader"
+	# TODO: Add a -NoHide param
 )
+
+Write-Host Please Wait...
 
 # Custom Assembly Types
 $code = @"
@@ -39,6 +45,8 @@ $code = @"
 	internal static extern int LoadString(IntPtr hInstance, uint wID, StringBuilder lpBuffer, int nBufferMax);
 [DllImport("Shell32.dll", CharSet = CharSet.Auto, SetLastError = true, BestFitMapping = false, ThrowOnUnmappableChar = true)]
 	internal static extern int ExtractIconEx(string sFile, int iIndex, out IntPtr piLargeVersion, out IntPtr piSmallVersion, int amountIcons);
+[DllImport("user32.dll")]
+	public static extern bool ShowWindow(int handle, int state);
 
 	// Returns a localized MUI string from the specified DLL
 	public static string GetMuiString(string dll, uint index)
@@ -70,6 +78,8 @@ $code = @"
 
 Add-Type -MemberDefinition $code -Namespace Gui -UsingNamespace "System.IO", "System.Text", "System.Drawing", "System.Globalization" -ReferencedAssemblies System.Drawing -Name Utils -ErrorAction Stop
 Add-Type -AssemblyName PresentationFramework
+# Hide the powershell window: https://stackoverflow.com/a/27992426/1069307
+$null = [Gui.Utils]::ShowWindow(([System.Diagnostics.Process]::GetCurrentProcess() | Get-Process).MainWindowHandle, 0)
 
 # Data
 $WindowsVersions = @(
@@ -116,6 +126,32 @@ $WindowsVersions = @(
 	)
 )
 
+# Translated messages. Empty string means same as English
+$Translations = @(
+	@(
+		"en-US",
+		"Windows version",
+		"Release",
+		"Edition",
+		"Language"
+		"Arch"
+		"Download"
+		"Confirm"
+		"Cancel"
+	),
+	@(
+		"fr-FR",
+		"Version de Windows"
+		"",
+		"Édition",
+		"Langue de produit"
+		"Arch"
+		"Télécharger"
+		"Confirmer"
+		"Abandonner"
+	)
+)
+
 # Functions
 function Add-Title([string]$Name)
 {
@@ -152,6 +188,7 @@ function Send-Message([string]$PipeName, [string]$Message)
 	[System.Text.Encoding]$Encoding = [System.Text.Encoding]::UTF8
 	$Pipe = New-Object -TypeName System.IO.Pipes.NamedPipeClientStream -ArgumentList ".", $PipeName, ([System.IO.Pipes.PipeDirection]::Out), ([System.IO.Pipes.PipeOptions]::None), ([System.Security.Principal.TokenImpersonationLevel]::Impersonation)
 	try {
+		Write-Host Connecting to $PipeName
 		$Pipe.Connect(1000)
 	} catch {
 		Write-Host $_.Exception.Message
@@ -184,6 +221,27 @@ function ConvertTo-ImageSource
 	}
 }
 
+# Translate a message string
+function Get-Translation([string]$Text)
+{
+	if (-not $Translations[0].Contains($Text)) {
+		Write-Host "Error: '$Text' is not a translatable string"
+		return "(Untranslated)"
+	}
+	foreach($Translation in $Translations) {
+		if ($Translation[0].StartsWith($ShortLocale)) {
+			for ($i = 1; $i -lt $Translation.Length; $i++) {
+				if ($Translations[0][$i] -eq $Text) {
+					if ($Translation[$i]) {
+						return $Translation[$i]
+					}
+				}
+			}
+		}
+	}
+	return $Text
+}
+
 function Exit-App([int]$ExitCode)
 {
 	$script:ExitCode = $ExitCode
@@ -191,13 +249,12 @@ function Exit-App([int]$ExitCode)
 }
 
 # XAML Form
-# TODO: Add FlowDirection = "RightToLeft" to <Window> for RTL mode
 [xml]$Form = @"
 <Window xmlns = "http://schemas.microsoft.com/winfx/2006/xaml/presentation" Height = "162" Width = "380" ResizeMode = "NoResize">
 	<Grid Name = "Grid">
-		<TextBlock Name = "WindowsVersionTitle" FontSize = "16" Width="340" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="16,8,0,0" Text="Windows Version"/>
+		<TextBlock Name = "WindowsVersionTitle" FontSize = "16" Width="340" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="16,8,0,0"/>
 		<ComboBox Name = "WindowsVersion" FontSize = "14" Height = "24" Width = "340" HorizontalAlignment = "Left" VerticalAlignment="Top" Margin = "14,34,0,0" SelectedIndex = "0"/>
-		<Button Name = "Confirm" FontSize = "16" Content = "Confirm" Height = "26" Width = "160" HorizontalAlignment = "Left" VerticalAlignment = "Top" Margin = "14,78,0,0"/>
+		<Button Name = "Confirm" FontSize = "16" Height = "26" Width = "160" HorizontalAlignment = "Left" VerticalAlignment = "Top" Margin = "14,78,0,0"/>
 	</Grid>
 </Window>
 "@
@@ -210,23 +267,34 @@ $SessionId = ""
 $Url = ""
 $ExitCode = 0
 
+# Locale handling
+if (-not $Locale) {
+	$Locale = "en-US"
+}
+$ShortLocale = $Locale
+if (-not $Locale.StartsWith("zh") -and -not $Locale.StartsWith("pt")) {
+	$ShortLocale = $Locale.Substring(0, 2)
+}
+
+# Form creation
 $XMLReader = New-Object System.Xml.XmlNodeReader $Form
 $XMLForm = [Windows.Markup.XamlReader]::Load($XMLReader)
-# Set application settings (icon, title, RTL mode)
 $XMLForm.Title = $AppTitle
 if ($Icon) {
 	$XMLForm.Icon = $Icon
 } else {
-	$XMLForm.Icon = [Gui.Utils]::ExtractIcon("shell32.dll", -262, $true) | ConvertTo-ImageSource
+	$XMLForm.Icon = [Gui.Utils]::ExtractIcon("shell32.dll", -41, $true) | ConvertTo-ImageSource
 }
 if ($Locale.StartsWith("ar-") -or  $Locale.StartsWith("fa-") -or $Locale.StartsWith("he-")) {
 	$XMLForm.FlowDirection = "RightToLeft"
 }
 $XMLGrid = $XMLForm.FindName("Grid")
 $Confirm = $XMLForm.FindName("Confirm")
+$Confirm.Content = Get-Translation("Confirm")
 
 # Populate in the Windows Version dropdown
 $WindowsVersionTitle = $XMLForm.FindName("WindowsVersionTitle")
+$WindowsVersionTitle.Text = Get-Translation("Windows version")
 $WindowsVersion = $XMLForm.FindName("WindowsVersion")
 $array = @()
 $i = 0
@@ -251,8 +319,11 @@ $Confirm.add_click({
 			# Force a refresh of the Confirm button so it is actually disabled
 			$Confirm.Dispatcher.Invoke("Render", [Windows.Input.InputEventHandler] { $Confirm.UpdateLayout() }, $null, $null)
 
+			$url = "https://www.microsoft.com/" + $Locale + "/software-download/windows10ISO/"
+			Write-Host Querying $url
+
 			try {
-				$r = Invoke-WebRequest -SessionVariable "Session" "https://www.microsoft.com/en-us/software-download/windows10ISO/"
+				$r = Invoke-WebRequest -SessionVariable "Session" $url
 				$script:SessionId = $r.ParsedHtml.IHTMLDocument3_GetElementById("session-id").Value
 				if (-not $SessionId) {
 					throw "Could not read Session ID"
@@ -262,7 +333,7 @@ $Confirm.add_click({
 				$UserInput = [System.Windows.MessageBox]::Show("Error: " + $_.Exception.Message, "Error", "OK", "Error")
 				Exit-App($Stage)
 			}
-			$script:WindowsReleaseTitle = Add-Title($WindowsVersion.SelectedValue.Version + " Release")
+			$script:WindowsReleaseTitle = Add-Title(Get-Translation("Release"))
 			$script:WindowsRelease = Add-Combo
 
 			$i = 0
@@ -283,7 +354,7 @@ $Confirm.add_click({
 
 		2 { # Windows Release selection => Populate Product Edition
 			$WindowsRelease.IsEnabled = $False
-			$ProductEditionTitle = Add-Title("Edition")
+			$ProductEditionTitle = Add-Title(Get-Translation("Edition"))
 			$script:ProductEdition = Add-Combo
 
 			$array = @()
@@ -304,11 +375,11 @@ $Confirm.add_click({
 			$ProductEdition.IsEnabled = $False
 			$Confirm.IsEnabled = $False
 			$Confirm.Dispatcher.Invoke("Render", [Windows.Input.InputEventHandler] { $Confirm.UpdateLayout() }, $null, $null)
-			$LanguageTitle = Add-Title("Language")
+			$LanguageTitle = Add-Title(Get-Translation("Language"))
 			$script:Language = Add-Combo
 
 			# Get the Product Edition
-			$url = "https://www.microsoft.com/en-us/api/controls/contentinclude/html"
+			$url = "https://www.microsoft.com/" + $Locale + "/api/controls/contentinclude/html"
 			$url += "?pageId=a8f8f489-4c7f-463a-9ca6-5cff94d8d041"
 			$url += "&host=www.microsoft.com"
 			$url += "&segments=software-download,windows10ISO"
@@ -316,6 +387,7 @@ $Confirm.add_click({
 			$url += "&sessionId=" + $SessionId
 			$url += "&productEditionId=" + $ProductEdition.SelectedValue.Id
 			$url += "&sdVersion=2"
+			Write-Host Querying $url
 
 			try {
 				$r = Invoke-WebRequest -WebSession $Session $url
@@ -323,7 +395,7 @@ $Confirm.add_click({
 				foreach ($var in $r.ParsedHtml.IHTMLDocument3_GetElementByID("product-languages")) {
 					$json = $var.value | ConvertFrom-Json;
 					if ($json) {
-						$array += @(New-Object PsObject -Property @{ Language = $json.language; Id = $json.id })
+						$array += @(New-Object PsObject -Property @{ DisplayLanguage = $var.text; Language = $json.language; Id = $json.id })
 					}
 				}
 				if ($array.Length -eq 0) {
@@ -335,8 +407,8 @@ $Confirm.add_click({
 				Exit-App($Stage)
 			}
 			$Language.ItemsSource = $array
-			$Language.DisplayMemberPath = "Language"
-			# TODO: Select language that matches current MUI settings
+			$Language.DisplayMemberPath = "DisplayLanguage"
+			# TODO: Select the language that matches $Locale
 			$XMLGrid.AddChild($LanguageTitle)
 			$XMLGrid.AddChild($Language)
 			$Confirm.IsEnabled = $True
@@ -349,7 +421,7 @@ $Confirm.add_click({
 			$ArchTitle = Add-Title("Architecture")
 			$script:Arch = Add-Combo
 
-			$url = "https://www.microsoft.com/en-us/api/controls/contentinclude/html"
+			$url = "https://www.microsoft.com/" + $Locale + "/api/controls/contentinclude/html"
 			$url += "?pageId=cfa9e580-a81e-4a4b-a846-7b21bf4e2e5b"
 			$url += "&host=www.microsoft.com"
 			$url += "&segments=software-download,windows10ISO"
@@ -358,6 +430,7 @@ $Confirm.add_click({
 			$url += "&skuId=" + $Language.SelectedValue.Id
 			$url += "&language=" + $Language.SelectedValue.Language
 			$url += "&sdVersion=2"
+			Write-Host Querying $url
 
 			try {
 				$r = Invoke-WebRequest -WebSession $Session $url
@@ -434,7 +507,7 @@ if ($Url) {
 	if ($PipeName) {
 		Send-Message -PipeName $PipeName -Message $Url
 	} else {
-		Write-Host $Url
+		Write-Host Download Link: $Url
 		Start-Process -FilePath $Url
 	}
 }
