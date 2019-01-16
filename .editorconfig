@@ -4,4 +4,5 @@ root = true
 [*]
 trim_trailing_whitespace = true
 insert_final_newline = true
-charset = utf-8
+# Must use a BOM else Unicode strings will not display
+charset = utf-8-bom

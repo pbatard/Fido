@@ -1,5 +1,5 @@
 ﻿#
-# Frida - The Full Retail ISO Download Application
+# Fido - Full Windows ISO Downloader
 # Copyright © 2019 Pete Batard <pete@akeo.ie>
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
 #
@@ -17,8 +17,13 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# NB: You need a BOM on your .ps1 if you want Powershell to actually
+# NB: You must have a BOM on your .ps1 if you want Powershell to actually
 # realise it should use Unicode for the UI controls and not ISO-8859-1
+
+# TODO:
+# - Add a -NoHide param
+# - Add translations
+# - Sort Windows 7 downloads
 
 # Parameters
 param(
@@ -31,9 +36,21 @@ param(
 	# (Optional) Path to the file that should be used for the UI icon.
 	[string]$Icon,
 	# (Optional) The title to display on the application window
-	[string]$AppTitle = "Frida - Full Retail ISO Downloader"
-	# TODO: Add a -NoHide param
+	[string]$AppTitle = "Fido - Windows Retail ISO Downloader"
 )
+
+$Debug = $False
+$Testing = $False
+if ($Testing) {
+	$Locale = "fr-CA"
+}
+$ENV:PROCESSOR_ARCHITECTURE
+$TestLangs = '{"languages":[
+	{ "language":"English", "text":"Anglais", "id":"100" },
+	{ "language":"English (International)", "text":"Anglais (International)", "id":"101" },
+	{ "language":"French", "text":"Français", "id":"102" },
+	{ "language":"French (Canadian)", "text":"Français (Canadien)", "id":"103" }
+]}'
 
 Write-Host Please Wait...
 
@@ -129,30 +146,83 @@ $WindowsVersions = @(
 # Translated messages. Empty string means same as English
 $Translations = @(
 	@(
-		"en-US",
-		"Windows version",
-		"Release",
-		"Edition",
+		"en-US"
+		"Version"
+		"Release"
+		"Edition"
 		"Language"
 		"Arch"
 		"Download"
 		"Confirm"
+		"Close"
 		"Cancel"
+		"Error"
 	),
 	@(
-		"fr-FR",
-		"Version de Windows"
-		"",
-		"Édition",
+		"fr-FR"
+		""
+		""
+		"Édition"
 		"Langue de produit"
-		"Arch"
+		""
 		"Télécharger"
 		"Confirmer"
+		"Fermer"
 		"Abandonner"
+		"Erreur"
 	)
 )
 
 # Functions
+function Select-Language([int]$ArrayIndex, [string]$LangName)
+{
+	if (($Locale.StartsWith("ar") -and $LangName -like "*Arabic*") -or `
+		($Locale -eq "pt-BR" -and $LangName -like "*Brazil*") -or `
+		($Locale.StartsWith("ar") -and $LangName -like "*Bulgar*") -or `
+		($Locale -eq "zh-CN" -and $LangName -like "*Chinese*" -and $LangName -like "*simp*") -or `
+		($Locale -eq "zh-TW" -and $LangName -like "*Chinese*" -and $LangName -like "*trad*") -or `
+		($Locale.StartsWith("hr") -and $LangName -like "*Croat*") -or `
+		($Locale.StartsWith("cz") -and $LangName -like "*Czech*") -or `
+		($Locale.StartsWith("da") -and $LangName -like "*Danish*") -or `
+		($Locale.StartsWith("nl") -and $LangName -like "*Dutch*") -or `
+		($Locale -eq "en-US" -and $LangName -eq "English") -or `
+		($Locale.StartsWith("en") -and $LangName -like "*English*" -and $LangName -like "*inter*") -or `
+		($Locale.StartsWith("et") -and $LangName -like "*Eston*") -or `
+		($Locale.StartsWith("fi") -and $LangName -like "*Finn*") -or `
+		($Locale -eq "fr-CA"  -and $LangName -like "*French*" -and $LangName -like "*Canad*") -or `
+		($Locale.StartsWith("fr") -and $LangName -eq "French") -or `
+		($Locale.StartsWith("de") -and $LangName -like "*German*") -or `
+		($Locale.StartsWith("el") -and $LangName -like "*Greek*") -or `
+		($Locale.StartsWith("he") -and $LangName -like "*Hebrew*") -or `
+		($Locale.StartsWith("hu") -and $LangName -like "*Hungar*") -or `
+		($Locale.StartsWith("id") -and $LangName -like "*Indones*") -or `
+		($Locale.StartsWith("it") -and $LangName -like "*Italia*") -or `
+		($Locale.StartsWith("ja") -and $LangName -like "*Japan*") -or `
+		($Locale.StartsWith("ko") -and $LangName -like "*Korea*") -or `
+		($Locale.StartsWith("lv") -and $LangName -like "*Latvia*") -or `
+		($Locale.StartsWith("lt") -and $LangName -like "*Lithuania*") -or `
+		($Locale.StartsWith("ms") -and $LangName -like "*Malay*") -or `
+		($Locale.StartsWith("nb") -and $LangName -like "*Norw*") -or `
+		($Locale.StartsWith("fa") -and $LangName -like "*Persia*") -or `
+		($Locale.StartsWith("pl") -and $LangName -like "*Polish*") -or `
+		($Locale -eq "pt-PT" -and $LangName -eq "Portuguese") -or `
+		($Locale.StartsWith("ro") -and $LangName -like "*Romania*") -or `
+		($Locale.StartsWith("ru") -and $LangName -like "*Russia*") -or `
+		($Locale.StartsWith("sr") -and $LangName -like "*Serbia*") -or `
+		($Locale.StartsWith("sk") -and $LangName -like "*Slovak*") -or `
+		($Locale.StartsWith("sl") -and $LangName -like "*Slovenia*") -or `
+		($Locale -eq "es-ES" -and $LangName -eq "Spanish") -or `
+		($Locale.StartsWith("es") -and $Locale -ne "es-ES" -and $LangName -like "*Spanish*") -or `
+		($Locale.StartsWith("sv") -and $LangName -like "*Swed*") -or `
+		($Locale.StartsWith("th") -and $LangName -like "*Thai*") -or `
+		($Locale.StartsWith("tr") -and $LangName -like "*Turk*") -or `
+		($Locale.StartsWith("uk") -and $LangName -like "*Ukrain*") -or `
+		($Locale.StartsWith("vi") -and $LangName -like "*Vietnam*")) {
+		return $ArrayIndex
+	}
+	return -1
+}
+
 function Add-Title([string]$Name)
 {
 	$Title = New-Object System.Windows.Controls.TextBlock
@@ -181,6 +251,11 @@ function Add-Combo
 	$Combo.Margin = $Margin
 	$Combo.SelectedIndex = 0
 	return $Combo
+}
+
+function Refresh-Control([object]$Control)
+{
+	$Control.Dispatcher.Invoke("Render", [Windows.Input.InputEventHandler] { $Confirm.UpdateLayout() }, $null, $null)
 }
 
 function Send-Message([string]$PipeName, [string]$Message)
@@ -242,10 +317,17 @@ function Get-Translation([string]$Text)
 	return $Text
 }
 
-function Exit-App([int]$ExitCode)
+function Error([string]$ErrorMessage)
 {
-	$script:ExitCode = $ExitCode
-	Get-Process -Id $pid | Foreach-Object { $_.CloseMainWindow() | Out-Null }
+	Write-Host $ErrorMessage
+	$XMLForm.Title = $(Get-Translation("Error")) + ": " + $ErrorMessage
+	Refresh-Control($XMLForm)
+	$Confirm.Content = Get-Translation("Close")
+	Refresh-Control($Confirm)
+	$UserInput = [System.Windows.MessageBox]::Show($XMLForm.Title,  $(Get-Translation("Error")), "OK", "Error")
+	$script:ExitCode = $Stage
+	$script:Stage = -1
+	$Confirm.IsEnabled = $True
 }
 
 # XAML Form
@@ -264,7 +346,6 @@ $dh = 58;
 $Stage = 0
 $MaxStage = 4
 $SessionId = ""
-$Url = ""
 $ExitCode = 0
 
 # Locale handling
@@ -274,6 +355,9 @@ if (-not $Locale) {
 $ShortLocale = $Locale
 if (-not $Locale.StartsWith("zh") -and -not $Locale.StartsWith("pt")) {
 	$ShortLocale = $Locale.Substring(0, 2)
+}
+if ($Debug) {
+	Write-Host Using locale "$Locale"
 }
 
 # Form creation
@@ -285,7 +369,7 @@ if ($Icon) {
 } else {
 	$XMLForm.Icon = [Gui.Utils]::ExtractIcon("shell32.dll", -41, $true) | ConvertTo-ImageSource
 }
-if ($Locale.StartsWith("ar-") -or  $Locale.StartsWith("fa-") -or $Locale.StartsWith("he-")) {
+if ($Locale.StartsWith("ar") -or  $Locale.StartsWith("fa") -or $Locale.StartsWith("he")) {
 	$XMLForm.FlowDirection = "RightToLeft"
 }
 $XMLGrid = $XMLForm.FindName("Grid")
@@ -294,7 +378,7 @@ $Confirm.Content = Get-Translation("Confirm")
 
 # Populate in the Windows Version dropdown
 $WindowsVersionTitle = $XMLForm.FindName("WindowsVersionTitle")
-$WindowsVersionTitle.Text = Get-Translation("Windows version")
+$WindowsVersionTitle.Text = Get-Translation("Version")
 $WindowsVersion = $XMLForm.FindName("WindowsVersion")
 $array = @()
 $i = 0
@@ -307,31 +391,34 @@ $WindowsVersion.DisplayMemberPath = "Version"
 
 # Button Action
 $Confirm.add_click({
-	if ($script:Stage++ -gt $MaxStage) {
+	if ($script:Stage++ -lt 0) {
+		Get-Process -Id $pid | Foreach-Object { $_.CloseMainWindow() | Out-Null }
 		return
 	}
 
 	switch ($Stage) {
 
 		1 { # Windows Version selection => Check server connection and populate Windows Release
+			$XMLForm.Title = "Querying Microsoft download servers..."
+			Refresh-Control($XMLForm)
 			$WindowsVersion.IsEnabled = $False;
 			$Confirm.IsEnabled = $False
-			# Force a refresh of the Confirm button so it is actually disabled
-			$Confirm.Dispatcher.Invoke("Render", [Windows.Input.InputEventHandler] { $Confirm.UpdateLayout() }, $null, $null)
+			Refresh-Control($Confirm)
 
 			$url = "https://www.microsoft.com/" + $Locale + "/software-download/windows10ISO/"
 			Write-Host Querying $url
 
-			try {
-				$r = Invoke-WebRequest -SessionVariable "Session" $url
-				$script:SessionId = $r.ParsedHtml.IHTMLDocument3_GetElementById("session-id").Value
-				if (-not $SessionId) {
-					throw "Could not read Session ID"
+			if (-not $Testing) {
+				try {
+					$r = Invoke-WebRequest -SessionVariable "Session" $url
+					$script:SessionId = $r.ParsedHtml.IHTMLDocument3_GetElementById("session-id").Value
+					if (-not $SessionId) {
+						throw "Could not read Session ID"
+					}
+				} catch {
+					Error($_.Exception.Message)
+					return
 				}
-			} catch {
-				Write-Host $_.Exception.Message
-				$UserInput = [System.Windows.MessageBox]::Show("Error: " + $_.Exception.Message, "Error", "OK", "Error")
-				Exit-App($Stage)
 			}
 			$script:WindowsReleaseTitle = Add-Title(Get-Translation("Release"))
 			$script:WindowsRelease = Add-Combo
@@ -349,6 +436,7 @@ $Confirm.add_click({
 
 			$XMLGrid.AddChild($WindowsReleaseTitle)
 			$XMLGrid.AddChild($WindowsRelease)
+			$XMLForm.Title = $AppTitle
 			$Confirm.IsEnabled = $True
 		}
 
@@ -389,26 +477,44 @@ $Confirm.add_click({
 			$url += "&sdVersion=2"
 			Write-Host Querying $url
 
-			try {
-				$r = Invoke-WebRequest -WebSession $Session $url
-				$array = @()
-				foreach ($var in $r.ParsedHtml.IHTMLDocument3_GetElementByID("product-languages")) {
-					$json = $var.value | ConvertFrom-Json;
-					if ($json) {
-						$array += @(New-Object PsObject -Property @{ DisplayLanguage = $var.text; Language = $json.language; Id = $json.id })
+			$array = @()
+			$index = 0
+			if (-not $Testing) {
+				try {
+					$r = Invoke-WebRequest -WebSession $Session $url
+					foreach ($var in $r.ParsedHtml.IHTMLDocument3_GetElementByID("product-languages")) {
+						if ($Debug) {
+							Write-Host  $var.value $var.text
+						}
+						$json = $var.value | ConvertFrom-Json;
+						if ($json) {
+							$array += @(New-Object PsObject -Property @{ DisplayLanguage = $var.text; Language = $json.language; Id = $json.id })
+							$s = Select-Language -ArrayIndex $index -LangName $json.language
+							if ($s -ge 0) {
+								$Language.SelectedIndex = $s
+							}
+							$index++
+						}
 					}
+					if ($array.Length -eq 0) {
+						throw "Could not parse languages"
+					}
+				} catch {
+					Error($_.Exception.Message)
+					return
 				}
-				if ($array.Length -eq 0) {
-					throw "Could not parse languages"
+			} else {
+				foreach ($var in $(ConvertFrom-Json –InputObject $TestLangs).languages) {
+					$array += @(New-Object PsObject -Property @{ DisplayLanguage = $var.text; Language = $var.language; Id = $var.id })
+					$s = Select-Language -ArrayIndex $index -LangName $var.language
+					if ($s -ge 0) {
+						$Language.SelectedIndex = $s
+					}
+					$index++
 				}
-			} catch {
-				Write-Host $_.Exception.Message
-				$UserInput = [System.Windows.MessageBox]::Show("Error: " + $_.Exception.Message, "Error", "OK", "Error")
-				Exit-App($Stage)
 			}
 			$Language.ItemsSource = $array
 			$Language.DisplayMemberPath = "DisplayLanguage"
-			# TODO: Select the language that matches $Locale
 			$XMLGrid.AddChild($LanguageTitle)
 			$XMLGrid.AddChild($Language)
 			$Confirm.IsEnabled = $True
@@ -432,50 +538,77 @@ $Confirm.add_click({
 			$url += "&sdVersion=2"
 			Write-Host Querying $url
 
-			try {
-				$r = Invoke-WebRequest -WebSession $Session $url
-				$array = @()
-				foreach ($var in $r.ParsedHtml.IHTMLDocument3_GetElementsByTagName("span") | Where-Object { $_.className -eq "product-download-type" }) {
-					$Link =  $var.ParentNode | Select -Expand href
-					$Type = $var.innerText
-					# Maybe Microsoft will provide ARM/ARM64 download links one day...
-					if ($Type -like "*arm64*") {
-						$Type = "Arm64"
-					} elseif ($Type -like "*arm*") {
-						$Type = "Arm"
-					} elseif ($Type -like "*x64*") {
-						$Type = "x64"
-					} elseif ($Type -like "*x86*") {
-						$Type = "x86"
+			$index = 0
+			$array = @()
+			if (-not $Testing) {
+				try {
+					$r = Invoke-WebRequest -WebSession $Session $url
+					foreach ($var in $r.ParsedHtml.IHTMLDocument3_GetElementsByTagName("span") | Where-Object { $_.className -eq "product-download-type" }) {
+						$Link =  $var.ParentNode | Select -Expand href
+						$Type = $var.innerText
+						# Maybe Microsoft will provide public ARM/ARM64 retail ISOs one day...
+						if ($Type -like "*arm64*") {
+							$Type = "Arm64"
+							if ($ENV:PROCESSOR_ARCHITECTURE -eq "ARM64") {
+								$Arch.SelectedIndex = $index
+							}
+						} elseif ($Type -like "*arm*") {
+							$Type = "Arm"
+							if ($ENV:PROCESSOR_ARCHITECTURE -eq "ARM") {
+								$Arch.SelectedIndex = $index
+							}
+						} elseif ($Type -like "*x64*") {
+							$Type = "x64"
+							if ($ENV:PROCESSOR_ARCHITECTURE -eq "AMD64") {
+								$Arch.SelectedIndex = $index
+							}
+						} elseif ($Type -like "*x86*") {
+							$Type = "x86"
+							if ($ENV:PROCESSOR_ARCHITECTURE -eq "X86") {
+								$Arch.SelectedIndex = $index
+							}
+						}
+						$array += @(New-Object PsObject -Property @{ Type = $Type; Link = $Link })
+						$index++
 					}
-					$array += @(New-Object PsObject -Property @{ Type = $Type; Link = $Link })
+					if ($array.Length -eq 0) {
+						Write-Host $r.ParsedHtml.body.innerText
+						throw "Could not retreive ISO download links"
+					}
+				} catch {
+					Error($_.Exception.Message)
+					return
 				}
-				if ($array.Length -eq 0) {
-					Write-Host $r.ParsedHtml.body.innerText
-					throw "Could not retreive ISO download links"
+			} else {
+				$array += @(New-Object PsObject -Property @{ Type = "x86"; Link = "https://rufus.ie" })
+				$index++
+				$array += @(New-Object PsObject -Property @{ Type = "x64"; Link = "https://rufus.ie" })
+				if ($ENV:PROCESSOR_ARCHITECTURE -eq "AMD64") {
+					$Arch.SelectedIndex = $index
 				}
-			} catch {
-				Write-Host $_.Exception.Message
-				$UserInput = [System.Windows.MessageBox]::Show("Error: " + $_.Exception.Message, "Error", "OK", "Error")
-				Exit-App($Stage)
 			}
-			# TODO: Select Arch that matches current host
 			$Arch.ItemsSource = $array
 			$Arch.DisplayMemberPath = "Type"
 			$XMLGrid.AddChild($ArchTitle)
 			$XMLGrid.AddChild($Arch)
-			$Confirm.Content = "Download"
+			$Confirm.Content = Get-Translation("Download")
 			$Confirm.IsEnabled = $True
 		}
 
 		5 { # Arch selection => Return selected download link
 			$Arch.IsEnabled = $False
-			$Confirm.IsEnabled = $False
-			$script:Url = $Arch.SelectedValue.Link
+			$Confirm.Content = Get-Translation("Close")
+			$script:Stage = -1
+			if ($PipeName) {
+				Send-Message -PipeName $PipeName -Message $Arch.SelectedValue.Link
+			} else {
+				Write-Host Download Link: $Arch.SelectedValue.Link
+				Start-Process -FilePath $Arch.SelectedValue.Link
+			}
 		}
 	}
 
-	if ($Stage -lt ($MaxStage + 1)) {
+	if ($Stage -gt 0) {
 		$XMLForm.Height += $dh;
 		$Margin = $Confirm.Margin
 		$Margin.Top += $dh
@@ -503,12 +636,4 @@ $null = $XMLForm.ShowDialog()
 
 # Clean up & exit
 Stop-Job -Job $Job
-if ($Url) {
-	if ($PipeName) {
-		Send-Message -PipeName $PipeName -Message $Url
-	} else {
-		Write-Host Download Link: $Url
-		Start-Process -FilePath $Url
-	}
-}
 exit $ExitCode
