@@ -24,6 +24,10 @@
 # - Add a -NoHide param
 # - Add translations
 # - Sort Windows 7 downloads
+# - Display all arch links?
+# - Icon does not display in taskbar when shell window is reduced
+# - Validate that download links are from Microsoft servers
+# - Add Expert mode for Home China and suff?
 
 # Parameters
 param(
@@ -39,12 +43,12 @@ param(
 	[string]$AppTitle = "Fido - Windows Retail ISO Downloader"
 )
 
-$Debug = $False
+$Debug   = $False
 $Testing = $False
 if ($Testing) {
 	$Locale = "fr-CA"
 }
-$ENV:PROCESSOR_ARCHITECTURE
+
 $TestLangs = '{"languages":[
 	{ "language":"English", "text":"Anglais", "id":"100" },
 	{ "language":"English (International)", "text":"Anglais (International)", "id":"101" },
@@ -99,51 +103,168 @@ Add-Type -AssemblyName PresentationFramework
 $null = [Gui.Utils]::ShowWindow(([System.Diagnostics.Process]::GetCurrentProcess() | Get-Process).MainWindowHandle, 0)
 
 # Data
+# TODO: Fetch this as JSON data?
 $WindowsVersions = @(
 	@(
 		"Windows 10",
 		@(
-			"1809 R2",
+			"1809 R2 (Build 17763.107 - 2018.10)",
 			@("Windows 10 Home/Pro", 1060),
-			@("Windows 10 Education", 1056)
+			@("Windows 10 Education", 1056),
+			@("Windows 10 Home China ", 1061)
 		),
 		@(
-			"1809 R1",
+			"1809 R1 (Build 17763.1 - 2018.09)",
 			@("Windows 10 Home/Pro", 1019),
-			@("Windows 10 Education", 1021)
+			@("Windows 10 Education", 1021),
+			@("Windows 10 Home China ", 1020)
 		),
 		@(
-			"1803",
+			"1803 (Build 17134.1 - 2018.04)",
 			@("Windows 10 Home/Pro", 651),
 			@("Windows 10 Education", 655),
 			@("Windows 10 Enterprise Eval", 629)
+			@("Windows 10 COEM 1803 Home China", 640),
+			@("Windows 10 COEM 1803", 639),
+			@("Windows 10 1803 Home China", 638),
+			@("Windows 10 1803", 637),
+			@("Windows 10 COEM 1803_1 Home China", 654),
+			@("Windows 10 COEM 1803_1", 653),
+			@("Windows 10 1803_1 Home China", 652)
+		),
+		@(
+			"1709 (Build 16299.15 - 2017.09)",
+			@("Windows 10 Education 1709", 488),
+			@("Windows 10 COEM 1709 Home China", 487),
+			@("Windows 10 COEM 1709", 486),
+			@("Windows 10 1709 Home China", 485),
+			@("Windows 10 1709", 484)
+		),
+		@(
+			"1703 (Build 15063.0 - 2017.03)",
+			@("Windows 10 1703 Education N", 424),
+			@("Windows 10 1703 Education", 423),
+			@("Windows 10 COEM 1703 Home China", 372),
+			@("Windows 10 COEM 1703 Single Language", 371),
+			@("Windows 10 COEM 1703 N", 370),
+			@("Windows 10 COEM 1703", 369),
+			@("Windows 10 1703 Home China (Redstone 2)", 364),
+			@("Windows 10 1703 Single Language (Redstone 2)", 363),
+			@("Windows 10 1703 N (Redstone 2)", 362),
+			@("Windows 10 1703 (Redstone 2)", 361)
+		),
+		@(
+			"1607 (Build 14393.0 - 2017.07)",
+			@("Windows 10 China Get Genuine (Redstone 1)", 247),
+			@("Windows 10 Single Language (Redstone 1)", 246),
+			@("Windows 10 N (Redstone 1)", 245),
+			@("Windows 10 (Redstone 1)", 244),
+			@("Windows 10 Education N (Redstone 1)", 243),
+			@("Windows 10 Education (Redstone 1)", 242)
+		),
+		@(
+			"1511 R3 (Build 10586.164 - 2016.04)",
+			@("Windows 10 China Get Genuine (Threshold 2, April 2016 Update)", 185),
+			@("Windows 10 Single Language (Threshold 2, April 2016 Update)", 184),
+			@("Windows 10 N (Threshold 2, April 2016 Update)", 183),
+			@("Windows 10 KN (Threshold 2, April 2016 Update)", 182),
+			@("Windows 10 Education N (Threshold 2, April 2016 Update)", 181),
+			@("Windows 10 Education KN (Threshold 2, April 2016 Update)", 180),
+			@("Windows 10 Education (Threshold 2, April 2016 Update)", 179),
+			@("Windows 10 (Threshold 2, April 2016 Update)", 178)
+		),
+		@(
+			"1511 R2 (Build 10586.104 - 2016.02)",
+			@("Windows 10 Single Language (Threshold 2, February 2016 Update)", 116),
+			@("Windows 10 N (Threshold 2, February 2016 Update)", 115),
+			@("Windows 10 KN (Threshold 2, February 2016 Update)", 114),
+			@("Windows 10 China Get Genuine (Threshold 2, February 2016 Update)", 113),
+			@("Windows 10 Education N (Threshold 2, February 2016 Update)", 112),
+			@("Windows 10 Education KN (Threshold 2, February 2016 Update)", 111),
+			@("Windows 10 Education (Threshold 2, February 2016 Update)", 110),
+			@("Windows 10 (Threshold 2, February 2016 Update)", 109)
+		),
+		@(
+			"1511 R1 (Build 10586.0 - 2015.11)",
+			@("Windows 10 Single Language (Threshold 2)", 106),
+			@("Windows 10 N (Threshold 2)", 105),
+			@("Windows 10 KN (Threshold 2)", 104),
+			@("Windows 10 China Get Genuine (Threshold 2)", 103),
+			@("Windows 10 Education N (Threshold 2)", 102),
+			@("Windows 10 Education KN (Threshold 2)", 101),
+			@("Windows 10 Education (Threshold 2)", 100),
+			@("Windows 10 (Threshold 2)", 99)
+		),
+		@(
+			"1507 (Build 10240.16384 - 2015.07)",
+			@("Windows 10 Single Language (Threshold 1)", 82),
+			@("Windows 10 N (Threshold 1)", 81),
+			@("Windows 10 KN (Threshold 1)", 80),
+			@("Windows 10 (Threshold 1)", 79),
+			@("Windows 10 China Get Genuine (Threshold 1)", 78),
+			@("Windows 10 Education N (Threshold 1)", 77),
+			@("Windows 10 Education KN (Threshold 1)", 76),
+			@("Windows 10 Education (Threshold 1)", 75)
 		)
 	),
 	@(
 		"Windows 8.1",
 		@(
-			"Full",
+			"Update 3 (build 9600)",
 			@("Windows 8.1/Windows 8.1 Pro", 52),
-			@("Windows 8.1 Single Language", 48)
-		),
-		@(
-			"N",
 			@("Windows 8.1/Windows 8.1 Pro N", 55)
+			@("Windows 8.1 Single Language", 48),
+			@("Windows 8.1 Professional LE N", 71),
+			@("Windows 8.1 Professional LE KN", 70),
+			@("Windows 8.1 Professional LE K", 69),
+			@("Windows 8.1 Professional LE", 68),
+			@("Windows 8.1 KN", 62),
+			@("Windows 8.1 K", 61)
 		)
 	),
 	@(
 		"Windows 7",
 		@(
-			"SP1",
+			"Windows 7 with SP1 (build 7601)",
 			@("Windows 7 Ultimate", 8),
 			@("Windows 7 Pro", 4),
 			@("Windows 7 Home Premium", 6),
-			@("Windows 7 Home Basic", 2)
+			@("Windows 7 Home Basic", 2),
+			@("Windows 7 Professional KN SP1 COEM", 98),
+			@("Windows 7 Home Premium KN SP1 COEM", 97),
+			@("Windows 7 Ultimate SP1 COEM", 96),
+			@("Windows 7 Ultimate N SP1 COEM", 95),
+			@("Windows 7 Ultimate KN SP1 COEM", 94),
+			@("Windows 7 Ultimate K SP1 COEM", 93),
+			@("Windows 7 Starter SP1 COEM", 92),
+			@("Windows 7 Professional SP1 COEM", 91),
+			@("Windows 7 Professional N SP1 COEM", 90),
+			@("Windows 7 Home Premium K SP1 COEM", 89),
+			@("Windows 7 Home Premium SP1 COEM GGK", 88),
+			@("Windows 7 Home Premium SP1 COEM", 87),
+			@("Windows 7 Home Premium N SP1 COEM", 86),
+			@("Windows 7 Home Basic SP1 COEM GGK", 85),
+			@("Windows 7 Home Basic SP1 COEM", 83),
+			@("Windows 7 Starter SP1", 28),
+			@("Windows 7 Ultimate K SP1", 26),
+			@("Windows 7 Ultimate KN SP1", 24),
+			@("Windows 7 Home Premium KN SP1", 22),
+			@("Windows 7 Home Premium K SP1", 20),
+			@("Windows 7 Professional KN SP1", 18),
+			@("Windows 7 Professional K SP1", 16),
+			@("Windows 7 Ultimate N SP1", 14),
+			@("Windows 7 Professional N SP1", 12),
+			@("Windows 7 Home Premium N SP1", 10),
+			@("Windows 7 Ultimate SP1", 8),
+			@("Windows 7 Home Premium SP1", 6),
+			@("Windows 7 Professional SP1", 4),
+			@("Windows 7 Home Basic SP1", 2)
 		)
 	)
 )
 
 # Translated messages. Empty string means same as English
+# TODO: Fetch this as JSON data?
 $Translations = @(
 	@(
 		"en-US"
@@ -347,6 +468,11 @@ $Stage = 0
 $MaxStage = 4
 $SessionId = ""
 $ExitCode = 0
+$PageType = "windows10ISO"
+
+$RequestData = @{}
+$RequestData["GetLangs"] = @("a8f8f489-4c7f-463a-9ca6-5cff94d8d041", "GetSkuInformationByProductEdition" )
+$RequestData["GetLinks"] = @("cfa9e580-a81e-4a4b-a846-7b21bf4e2e5b", "GetProductDownloadLinksBySku" )
 
 # Locale handling
 if (-not $Locale) {
@@ -398,7 +524,7 @@ $Confirm.add_click({
 
 	switch ($Stage) {
 
-		1 { # Windows Version selection => Check server connection and populate Windows Release
+		1 { # Windows Version selection => Get a Session ID and populate Windows Release
 			$XMLForm.Title = "Querying Microsoft download servers..."
 			Refresh-Control($XMLForm)
 			$WindowsVersion.IsEnabled = $False;
@@ -413,6 +539,10 @@ $Confirm.add_click({
 					$r = Invoke-WebRequest -SessionVariable "Session" $url
 					$script:SessionId = $r.ParsedHtml.IHTMLDocument3_GetElementById("session-id").Value
 					if (-not $SessionId) {
+						$ErrorMessage = $r.ParsedHtml.IHTMLDocument3_GetElementByID("errorModalMessage").innerHtml
+						if ($ErrorMessage) {
+							Write-Host "$(Get-Translation("Error")): ""$ErrorMessage"""
+						}
 						throw "Could not read Session ID"
 					}
 				} catch {
@@ -468,10 +598,10 @@ $Confirm.add_click({
 
 			# Get the Product Edition
 			$url = "https://www.microsoft.com/" + $Locale + "/api/controls/contentinclude/html"
-			$url += "?pageId=a8f8f489-4c7f-463a-9ca6-5cff94d8d041"
+			$url += "?pageId=" + $RequestData["GetLangs"][0]
 			$url += "&host=www.microsoft.com"
-			$url += "&segments=software-download,windows10ISO"
-			$url += "&query=&action=GetSkuInformationByProductEdition"
+			$url += "&segments=software-download," + $PageType
+			$url += "&query=&action=" + $RequestData["GetLangs"][1]
 			$url += "&sessionId=" + $SessionId
 			$url += "&productEditionId=" + $ProductEdition.SelectedValue.Id
 			$url += "&sdVersion=2"
@@ -482,12 +612,14 @@ $Confirm.add_click({
 			if (-not $Testing) {
 				try {
 					$r = Invoke-WebRequest -WebSession $Session $url
+					Write-Host $r.ParsedHtml.body.innerHTML
 					foreach ($var in $r.ParsedHtml.IHTMLDocument3_GetElementByID("product-languages")) {
 						if ($Debug) {
 							Write-Host  $var.value $var.text
 						}
 						$json = $var.value | ConvertFrom-Json;
 						if ($json) {
+							Write-Host $var.text $json.language; $json.id
 							$array += @(New-Object PsObject -Property @{ DisplayLanguage = $var.text; Language = $json.language; Id = $json.id })
 							$s = Select-Language -ArrayIndex $index -LangName $json.language
 							if ($s -ge 0) {
@@ -497,6 +629,10 @@ $Confirm.add_click({
 						}
 					}
 					if ($array.Length -eq 0) {
+						$ErrorMessage = $r.ParsedHtml.IHTMLDocument3_GetElementByID("errorModalMessage").innerHtml
+						if ($ErrorMessage) {
+							Write-Host "$(Get-Translation("Error")): ""$ErrorMessage"""
+						}
 						throw "Could not parse languages"
 					}
 				} catch {
@@ -520,6 +656,10 @@ $Confirm.add_click({
 			$Confirm.IsEnabled = $True
 		}
 
+		# https://www.microsoft.com/en-us/api/controls/contentinclude/html?pageId=160bb813-f54e-4e9f-bffc-38c6eb56e061&host=www.microsoft.com&segments=software-download%2cwindows10&query=&action=GetProductDownloadLinkForFriendlyFileName&friendlyFileName=
+		# https://www.microsoft.com/en-us/api/controls/contentinclude/html?pageId=cfa9e580-a81e-4a4b-a846-7b21bf4e2e5b&host=www.microsoft.com&segments=software-download,windows10ISO&query=&action=GetProductDownloadLinksBySku&skuId=
+
+
 		4 { # Language selection => Request and populate Arch download links
 			$Language.IsEnabled = $False
 			$Confirm.IsEnabled = $False
@@ -528,10 +668,10 @@ $Confirm.add_click({
 			$script:Arch = Add-Combo
 
 			$url = "https://www.microsoft.com/" + $Locale + "/api/controls/contentinclude/html"
-			$url += "?pageId=cfa9e580-a81e-4a4b-a846-7b21bf4e2e5b"
+			$url += "?pageId=" + $RequestData["GetLinks"][0]
 			$url += "&host=www.microsoft.com"
-			$url += "&segments=software-download,windows10ISO"
-			$url += "&query=&action=GetProductDownloadLinksBySku"
+			$url += "&segments=software-download," + $PageType
+			$url += "&query=&action=" + $RequestData["GetLinks"][1]
 			$url += "&sessionId=" + $SessionId
 			$url += "&skuId=" + $Language.SelectedValue.Id
 			$url += "&language=" + $Language.SelectedValue.Language
@@ -543,6 +683,7 @@ $Confirm.add_click({
 			if (-not $Testing) {
 				try {
 					$r = Invoke-WebRequest -WebSession $Session $url
+					Write-Host $r.ParsedHtml.body.innerText
 					foreach ($var in $r.ParsedHtml.IHTMLDocument3_GetElementsByTagName("span") | Where-Object { $_.className -eq "product-download-type" }) {
 						$Link =  $var.ParentNode | Select -Expand href
 						$Type = $var.innerText
@@ -572,7 +713,10 @@ $Confirm.add_click({
 						$index++
 					}
 					if ($array.Length -eq 0) {
-						Write-Host $r.ParsedHtml.body.innerText
+						$ErrorMessage = $r.ParsedHtml.IHTMLDocument3_GetElementByID("errorModalMessage").innerHtml
+						if ($ErrorMessage) {
+							Write-Host "$(Get-Translation("Error")): ""$ErrorMessage"""
+						}
 						throw "Could not retreive ISO download links"
 					}
 				} catch {
