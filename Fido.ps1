@@ -88,7 +88,6 @@ Add-Type -AssemblyName PresentationFramework
 #endregion
 
 #region Data
-# TODO: Fetch this as JSON data?
 $WindowsVersions = @(
 	@(
 		"Windows 10",
@@ -205,45 +204,6 @@ $WindowsVersions = @(
 			@("Windows 8.1 Professional LE", 68),
 			@("Windows 8.1 KN", -62),
 			@("Windows 8.1 K", -61)
-		)
-	),
-	@(
-		"Windows 7",
-		@(
-			"Windows 7 with SP1 (build 7601)",
-			@("Windows 7 Ultimate", 8),
-			@("Windows 7 Pro", 4),
-			@("Windows 7 Home Premium", 6),
-			@("Windows 7 Home Basic", 2),
-			@("Windows 7 Professional KN SP1 COEM", -98),
-			@("Windows 7 Home Premium KN SP1 COEM", -97),
-			@("Windows 7 Ultimate SP1 COEM", -96),
-			@("Windows 7 Ultimate N SP1 COEM", -95),
-			@("Windows 7 Ultimate KN SP1 COEM", -94),
-			@("Windows 7 Ultimate K SP1 COEM", -93),
-			@("Windows 7 Starter SP1 COEM", -92),
-			@("Windows 7 Professional SP1 COEM", -91),
-			@("Windows 7 Professional N SP1 COEM", -90),
-			@("Windows 7 Home Premium K SP1 COEM", -89),
-			@("Windows 7 Home Premium SP1 COEM GGK", -88),
-			@("Windows 7 Home Premium SP1 COEM", -87),
-			@("Windows 7 Home Premium N SP1 COEM", -86),
-			@("Windows 7 Home Basic SP1 COEM GGK", -85),
-			@("Windows 7 Home Basic SP1 COEM", -83),
-			@("Windows 7 Starter SP1", 28),
-			@("Windows 7 Ultimate K SP1", -26),
-			@("Windows 7 Ultimate KN SP1", -24),
-			@("Windows 7 Home Premium KN SP1", -22),
-			@("Windows 7 Home Premium K SP1", -20),
-			@("Windows 7 Professional KN SP1", -18),
-			@("Windows 7 Professional K SP1", -16),
-			@("Windows 7 Ultimate N SP1", 14),
-			@("Windows 7 Professional N SP1", 12),
-			@("Windows 7 Home Premium N SP1", 10),
-			@("Windows 7 Ultimate SP1", 8),
-			@("Windows 7 Home Premium SP1", 6),
-			@("Windows 7 Professional SP1", 4),
-			@("Windows 7 Home Basic SP1", 2)
 		)
 	)
 )
@@ -445,7 +405,7 @@ $dh = 58;
 $Stage = 0
 $MaxStage = 4
 $SessionId = ""
-$ExitCode = 0
+$ExitCode = -1
 $PageType = "windows10ISO"
 $Locale = "en-US"
 
@@ -455,9 +415,9 @@ $RequestData["GetLinks"] = @("cfa9e580-a81e-4a4b-a846-7b21bf4e2e5b", "GetProduct
 #endregion
 
 # Localization
-$EnglishMessages = "en-US|Version|Release|Edition|Language|Architecture|Download|Confirm|Back|Close|Error|Please wait..."
+$EnglishMessages = "en-US|Version|Release|Edition|Language|Architecture|Download|Confirm|Modify|Close|Cancel|Error|Please wait..."
 if ($Testing) {
-	$LocData = "fr-FR|||Édition|Langue de produit||Télécharger|Confirmer|Retour|Fermer|Erreur|Veuillez patienter..."
+	$LocData = "fr-FR|||Édition|Langue de produit||Télécharger|Confirmer|Modifier|Fermer|Annuler|Erreur|Veuillez patienter..."
 	$TestLangs = '{"languages":[
 		{ "language":"English", "text":"Anglais", "id":"100" },
 		{ "language":"English (International)", "text":"Anglais (International)", "id":"101" },
@@ -490,8 +450,7 @@ if ($Locale.StartsWith("ar") -or  $Locale.StartsWith("fa") -or $Locale.StartsWit
 }
 $WindowsVersionTitle.Text = Get-Translation("Version")
 $Confirm.Content = Get-Translation("Confirm")
-$Back.Content = Get-Translation("Back")
-$Back.IsEnabled = $False
+$Back.Content = Get-Translation("Cancel")
 
 # Populate the Windows versions
 $i = 0
@@ -552,6 +511,7 @@ $Confirm.add_click({
 			}
 
 			$script:WindowsRelease = Add-Entry $Stage "Release" $array
+			$Back.Content = Get-Translation($English[8])
 			$XMLForm.Title = $AppTitle
 		}
 
@@ -682,9 +642,9 @@ $Confirm.add_click({
 					return
 				}
 			} else {
-				$array += @(New-Object PsObject -Property @{ Type = "x86"; Link = "https://rufus.ie" })
+				$array += @(New-Object PsObject -Property @{ Type = "x86"; Link = "https://software-download.microsoft.com/sg/Win10_1809Oct_English_x86.iso" })
 				$i++
-				$array += @(New-Object PsObject -Property @{ Type = "x64"; Link = "https://rufus.ie" })
+				$array += @(New-Object PsObject -Property @{ Type = "x64"; Link = "https://software-download.microsoft.com/sg/Win10_1809Oct_English_x64.iso" })
 				if ($ENV:PROCESSOR_ARCHITECTURE -eq "AMD64") {
 					$SelectedIndex = $i
 				}
@@ -703,7 +663,8 @@ $Confirm.add_click({
 				Write-Host Download Link: $Arch.SelectedValue.Link
 				Start-Process -FilePath $Arch.SelectedValue.Link
 			}
-			$Confirm.Content = Get-Translation("Close")
+			$script:ExitCode = 0
+			$XMLForm.Close()
 		}
 	}
 	$Confirm.IsEnabled = $True
@@ -713,22 +674,25 @@ $Confirm.add_click({
 })
 
 $Back.add_click({
-	$XMLGrid.Children.RemoveAt(2 * $Stage + 3)
-	$XMLGrid.Children.RemoveAt(2 * $Stage + 2)
-	$XMLGrid.Children[2 * $Stage + 1].IsEnabled = $True
-	$XMLForm.Height -= $dh;
-	$Margin = $Confirm.Margin
-	$Margin.Top -= $dh
-	$Confirm.Margin = $Margin
-	$Margin = $Back.Margin
-	$Margin.Top -= $dh
-	$Back.Margin = $Margin
-	$script:Stage = $Stage - 1
 	if ($Stage -eq 0) {
-		$Back.IsEnabled = $False
-	}
-	if ($Stage -eq 3) {
-		$Confirm.Content = Get-Translation("Confirm")
+		$XMLForm.Close()
+	} else {
+		$XMLGrid.Children.RemoveAt(2 * $Stage + 3)
+		$XMLGrid.Children.RemoveAt(2 * $Stage + 2)
+		$XMLGrid.Children[2 * $Stage + 1].IsEnabled = $True
+		$XMLForm.Height -= $dh;
+		$Margin = $Confirm.Margin
+		$Margin.Top -= $dh
+		$Confirm.Margin = $Margin
+		$Margin = $Back.Margin
+		$Margin.Top -= $dh
+		$Back.Margin = $Margin
+		$script:Stage = $Stage - 1
+		if ($Stage -eq 0) {
+			$Back.Content = Get-Translation("Cancel")
+		} elseif ($Stage -eq 3) {
+			$Confirm.Content = Get-Translation("Confirm")
+		}
 	}
 })
 
