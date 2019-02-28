@@ -1,5 +1,5 @@
 ﻿#
-# Fido - Full Windows ISO Downloader
+# Fido - Retail Windows ISO Downloader
 # Copyright © 2019 Pete Batard <pete@akeo.ie>
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
 #
@@ -30,14 +30,14 @@ param(
 	# (Optional) Path to the file that should be used for the UI icon.
 	[string]$Icon,
 	# (Optional) The title to display on the application window
-	[string]$AppTitle = "Fido - Windows Retail ISO Downloader"
+	[string]$AppTitle = "Fido - Retail Windows ISO Downloader",
+	# (Optional) Whether to show the "Download in a browser" checkbox
+	[switch]$ShowBrowserOption = $True,
+	# (Optional) Test/Debug options
+	[switch]$Debug = $False,
+	[switch]$Expert = $False,
+	[switch]$Testing = $False
 )
-#endregion
-
-#region Testing
-$Debug   = $False
-$Testing = $False
-$Expert  = $False
 #endregion
 
 Write-Host Please Wait...
@@ -90,7 +90,7 @@ Add-Type -AssemblyName PresentationFramework
 #region Data
 $WindowsVersions = @(
 	@(
-		"Windows 10",
+		@("Windows 10", "Windows10ISO"),
 		@(
 			"1809 R2 (Build 17763.107 - 2018.10)",
 			@("Windows 10 Home/Pro", 1060),
@@ -192,11 +192,11 @@ $WindowsVersions = @(
 		)
 	),
 	@(
-		"Windows 8.1",
+		@("Windows 8.1", "windows8ISO"),
 		@(
 			"Update 3 (build 9600)",
-			@("Windows 8.1/Windows 8.1 Pro", 52),
-			@("Windows 8.1/Windows 8.1 Pro N", 55)
+			@("Windows 8.1", 52),
+			@("Windows 8.1 N", 55)
 			@("Windows 8.1 Single Language", 48),
 			@("Windows 8.1 Professional LE N", 71),
 			@("Windows 8.1 Professional LE KN", -70),
@@ -395,6 +395,7 @@ function Error([string]$ErrorMessage)
 		<Button Name = "Back" FontSize = "16" Height = "26" Width = "160" HorizontalAlignment = "Left" VerticalAlignment = "Top" Margin = "194,78,0,0"/>
 		<TextBlock Name = "WindowsVersionTitle" FontSize = "16" Width="340" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="16,8,0,0"/>
 		<ComboBox Name = "WindowsVersion" FontSize = "14" Height = "24" Width = "340" HorizontalAlignment = "Left" VerticalAlignment="Top" Margin = "14,34,0,0" SelectedIndex = "0"/>
+		<CheckBox Name = "Check" FontSize = "14" Width = "340" HorizontalAlignment = "Left" VerticalAlignment="Top" Margin = "14,0,0,0" Visibility="Collapsed" />
 	</Grid>
 </Window>
 "@
@@ -406,7 +407,6 @@ $Stage = 0
 $MaxStage = 4
 $SessionId = ""
 $ExitCode = -1
-$PageType = "windows10ISO"
 $Locale = "en-US"
 
 $RequestData = @{}
@@ -415,9 +415,9 @@ $RequestData["GetLinks"] = @("cfa9e580-a81e-4a4b-a846-7b21bf4e2e5b", "GetProduct
 #endregion
 
 # Localization
-$EnglishMessages = "en-US|Version|Release|Edition|Language|Architecture|Download|Confirm|Modify|Close|Cancel|Error|Please wait..."
+$EnglishMessages = "en-US|Version|Release|Edition|Language|Architecture|Download|Confirm|Modify|Close|Cancel|Error|Please wait...|Download using a browser"
 if ($Testing) {
-	$LocData = "fr-FR|||Édition|Langue de produit||Télécharger|Confirmer|Modifier|Fermer|Annuler|Erreur|Veuillez patienter..."
+	$LocData = "fr-FR|||Édition|Langue de produit||Télécharger|Confirmer|Modifier|Fermer|Annuler|Erreur|Veuillez patienter...|Télécharger avec un navigateur"
 	$TestLangs = '{"languages":[
 		{ "language":"English", "text":"Anglais", "id":"100" },
 		{ "language":"English (International)", "text":"Anglais (International)", "id":"101" },
@@ -456,7 +456,7 @@ $Back.Content = Get-Translation("Cancel")
 $i = 0
 $array = @()
 foreach($Version in $WindowsVersions) {
-	$array += @(New-Object PsObject -Property @{ Version = $Version[0]; Index = $i })
+	$array += @(New-Object PsObject -Property @{ Version = $Version[0][0]; PageType = $Version[0][1]; Index = $i })
 	$i++
 }
 $WindowsVersion.ItemsSource = $array
@@ -478,10 +478,11 @@ $Confirm.add_click({
 	switch ($Stage) {
 
 		1 { # Windows Version selection => Get a Session ID and populate Windows Release
-			$XMLForm.Title = Get-Translation("Please wait...")
+			$XMLForm.Title = Get-Translation($English[12])
 			Refresh-Control($XMLForm)
 
-			$url = "https://www.microsoft.com/" + $Locale + "/software-download/windows10ISO/"
+			$url = "https://www.microsoft.com/" + $Locale + "/software-download/"
+			$url += $WindowsVersion.SelectedValue.PageType
 			Write-Host Querying $url
 
 			if (-not $Testing) {
@@ -504,7 +505,7 @@ $Confirm.add_click({
 			$i = 0
 			$array = @()
 			foreach ($Version in $WindowsVersions[$WindowsVersion.SelectedValue.Index]) {
-				if ($Version -is [array]) {
+				if (($i -ne 0) -and ($Version -is [array])) {
 					$array += @(New-Object PsObject -Property @{ Release = $Version[0]; Index = $i })
 				}
 				$i++
@@ -534,7 +535,7 @@ $Confirm.add_click({
 			$url = "https://www.microsoft.com/" + $Locale + "/api/controls/contentinclude/html"
 			$url += "?pageId=" + $RequestData["GetLangs"][0]
 			$url += "&host=www.microsoft.com"
-			$url += "&segments=software-download," + $PageType
+			$url += "&segments=software-download," + $WindowsVersion.SelectedValue.PageType
 			$url += "&query=&action=" + $RequestData["GetLangs"][1]
 			$url += "&sessionId=" + $SessionId
 			$url += "&productEditionId=" + [Math]::Abs($ProductEdition.SelectedValue.Id)
@@ -588,7 +589,7 @@ $Confirm.add_click({
 			$url = "https://www.microsoft.com/" + $Locale + "/api/controls/contentinclude/html"
 			$url += "?pageId=" + $RequestData["GetLinks"][0]
 			$url += "&host=www.microsoft.com"
-			$url += "&segments=software-download," + $PageType
+			$url += "&segments=software-download," + $WindowsVersion.SelectedValue.PageType
 			$url += "&query=&action=" + $RequestData["GetLinks"][1]
 			$url += "&sessionId=" + $SessionId
 			$url += "&skuId=" + $Language.SelectedValue.Id
@@ -651,13 +652,27 @@ $Confirm.add_click({
 			}
 
 			$script:Arch = Add-Entry $Stage "Architecture" $array "Type"
+			if (($PipeName -or $Testing) -and $ShowBrowserOption) {
+				$XMLForm.Height += $dh / 2;
+				$Margin = $Confirm.Margin
+				$top = $Margin.Top
+				$Margin.Top += $dh /2
+				$Confirm.Margin = $Margin
+				$Margin = $Back.Margin
+				$Margin.Top += $dh / 2
+				$Back.Margin = $Margin
+				$Margin = $Check.Margin
+				$Margin.Top = $top - 2
+				$Check.Margin = $Margin
+				$Check.Content = Get-Translation($English[13])
+				$Check.Visibility = "Visible"
+			}
 			$Arch.SelectedIndex = $SelectedIndex
 			$Confirm.Content = Get-Translation("Download")
 		}
 
 		5 { # Arch selection => Return selected download link
-			$script:Stage = -1
-			if ($PipeName) {
+			if ($PipeName -and -not $Check.IsChecked) {
 				Send-Message -PipeName $PipeName -Message $Arch.SelectedValue.Link
 			} else {
 				Write-Host Download Link: $Arch.SelectedValue.Link
@@ -680,12 +695,17 @@ $Back.add_click({
 		$XMLGrid.Children.RemoveAt(2 * $Stage + 3)
 		$XMLGrid.Children.RemoveAt(2 * $Stage + 2)
 		$XMLGrid.Children[2 * $Stage + 1].IsEnabled = $True
-		$XMLForm.Height -= $dh;
+		$dh2 = $dh
+		if ($Stage -eq 4 -and $ShowBrowserOption) {
+			$Check.Visibility = "Collapsed"
+			$dh2 += $dh / 2
+		}
+		$XMLForm.Height -= $dh2;
 		$Margin = $Confirm.Margin
-		$Margin.Top -= $dh
+		$Margin.Top -= $dh2
 		$Confirm.Margin = $Margin
 		$Margin = $Back.Margin
-		$Margin.Top -= $dh
+		$Margin.Top -= $dh2
 		$Back.Margin = $Margin
 		$script:Stage = $Stage - 1
 		if ($Stage -eq 0) {
