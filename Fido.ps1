@@ -1,5 +1,5 @@
 ﻿#
-# Fido - Retail Windows ISO Downloader
+# Fido v1.01 - Retail Windows ISO Downloader
 # Copyright © 2019 Pete Batard <pete@akeo.ie>
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
 #
@@ -22,21 +22,17 @@
 
 #region Parameters
 param(
+	# (Optional) The title to display on the application window.
+	[string]$AppTitle = "Fido - Retail Windows ISO Downloader",
+	# (Optional) '|' separated UI localization strings.
+	[string]$LocData,
+	# (Optional) Path to a file that should be used for the UI icon.
+	[string]$Icon,
 	# (Optional) Name of a pipe the download URL should be sent to.
 	# If not provided, a browser window is opened instead.
 	[string]$PipeName,
-	# (Optional) '|' separated UI localization strings.
-	[string]$LocData,
-	# (Optional) Path to the file that should be used for the UI icon.
-	[string]$Icon,
-	# (Optional) The title to display on the application window
-	[string]$AppTitle = "Fido - Retail Windows ISO Downloader",
-	# (Optional) Whether to show the "Download in a browser" checkbox
-	[switch]$ShowBrowserOption = $True,
-	# (Optional) Test/Debug options
-	[switch]$Debug = $False,
-	[switch]$Expert = $False,
-	[switch]$Testing = $False
+	# (Optional) Toggle expert mode (additional ISOs to choose).
+	[switch]$Expert = $False
 )
 #endregion
 
@@ -61,8 +57,6 @@ $code = @"
 		if (!File.Exists(muiPath))
 			muiPath = Environment.SystemDirectory + @"\en-US\" + dll + ".mui";
 		IntPtr hMui = LoadLibrary(muiPath);
-		if (hMui == null)
-				return "";
 		StringBuilder szString = new StringBuilder(MAX_PATH);
 		LoadString(hMui, (uint)index, szString, MAX_PATH);
 		return szString.ToString();
@@ -296,9 +290,9 @@ function Add-Entry([int]$pos, [string]$Name, [array]$Items, [string]$DisplayName
 	$XMLGrid.Children.Insert(2 * $Stage + 3, $Combo)
 
 	$XMLForm.Height += $dh;
-	$Margin = $Confirm.Margin
+	$Margin = $Continue.Margin
 	$Margin.Top += $dh
-	$Confirm.Margin = $Margin
+	$Continue.Margin = $Margin
 	$Margin = $Back.Margin
 	$Margin.Top += $dh
 	$Back.Margin = $Margin
@@ -308,7 +302,7 @@ function Add-Entry([int]$pos, [string]$Name, [array]$Items, [string]$DisplayName
 
 function Refresh-Control([object]$Control)
 {
-	$Control.Dispatcher.Invoke("Render", [Windows.Input.InputEventHandler] { $Confirm.UpdateLayout() }, $null, $null)
+	$Control.Dispatcher.Invoke("Render", [Windows.Input.InputEventHandler] { $Continue.UpdateLayout() }, $null, $null)
 }
 
 function Send-Message([string]$PipeName, [string]$Message)
@@ -316,7 +310,6 @@ function Send-Message([string]$PipeName, [string]$Message)
 	[System.Text.Encoding]$Encoding = [System.Text.Encoding]::UTF8
 	$Pipe = New-Object -TypeName System.IO.Pipes.NamedPipeClientStream -ArgumentList ".", $PipeName, ([System.IO.Pipes.PipeDirection]::Out), ([System.IO.Pipes.PipeOptions]::None), ([System.Security.Principal.TokenImpersonationLevel]::Impersonation)
 	try {
-		Write-Host Connecting to $PipeName
 		$Pipe.Connect(1000)
 	} catch {
 		Write-Host $_.Exception.Message
@@ -378,12 +371,12 @@ function Error([string]$ErrorMessage)
 	Write-Host $ErrorMessage
 	$XMLForm.Title = $(Get-Translation("Error")) + ": " + $ErrorMessage
 	Refresh-Control($XMLForm)
-	$Confirm.Content = Get-Translation("Close")
-	Refresh-Control($Confirm)
+	$Continue.Content = Get-Translation("Close")
+	Refresh-Control($Continue)
 	$UserInput = [System.Windows.MessageBox]::Show($XMLForm.Title,  $(Get-Translation("Error")), "OK", "Error")
 	$script:ExitCode = $Stage
 	$script:Stage = -1
-	$Confirm.IsEnabled = $True
+	$Continue.IsEnabled = $True
 }
 #endregion
 
@@ -391,7 +384,7 @@ function Error([string]$ErrorMessage)
 [xml]$XAML = @"
 <Window xmlns = "http://schemas.microsoft.com/winfx/2006/xaml/presentation" Height = "162" Width = "384" ResizeMode = "NoResize">
 	<Grid Name = "XMLGrid">
-		<Button Name = "Confirm" FontSize = "16" Height = "26" Width = "160" HorizontalAlignment = "Left" VerticalAlignment = "Top" Margin = "14,78,0,0"/>
+		<Button Name = "Continue" FontSize = "16" Height = "26" Width = "160" HorizontalAlignment = "Left" VerticalAlignment = "Top" Margin = "14,78,0,0"/>
 		<Button Name = "Back" FontSize = "16" Height = "26" Width = "160" HorizontalAlignment = "Left" VerticalAlignment = "Top" Margin = "194,78,0,0"/>
 		<TextBlock Name = "WindowsVersionTitle" FontSize = "16" Width="340" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="16,8,0,0"/>
 		<ComboBox Name = "WindowsVersion" FontSize = "14" Height = "24" Width = "340" HorizontalAlignment = "Left" VerticalAlignment="Top" Margin = "14,34,0,0" SelectedIndex = "0"/>
@@ -415,16 +408,7 @@ $RequestData["GetLinks"] = @("cfa9e580-a81e-4a4b-a846-7b21bf4e2e5b", "GetProduct
 #endregion
 
 # Localization
-$EnglishMessages = "en-US|Version|Release|Edition|Language|Architecture|Download|Confirm|Modify|Close|Cancel|Error|Please wait...|Download using a browser"
-if ($Testing) {
-	$LocData = "fr-FR|||Édition|Langue de produit||Télécharger|Confirmer|Modifier|Fermer|Annuler|Erreur|Veuillez patienter...|Télécharger avec un navigateur"
-	$TestLangs = '{"languages":[
-		{ "language":"English", "text":"Anglais", "id":"100" },
-		{ "language":"English (International)", "text":"Anglais (International)", "id":"101" },
-		{ "language":"French", "text":"Français", "id":"102" },
-		{ "language":"French (Canadian)", "text":"Français (Canadien)", "id":"103" }
-	]}'
-}
+$EnglishMessages = "en-US|Version|Release|Edition|Language|Architecture|Download|Continue|Back|Close|Cancel|Error|Please wait...|Download using a browser"
 [string[]]$English = $EnglishMessages.Split('|')
 [string[]]$Localized = $null
 if ($LocData -and (-not $LocData.StartsWith("en-US"))) {
@@ -449,7 +433,7 @@ if ($Locale.StartsWith("ar") -or  $Locale.StartsWith("fa") -or $Locale.StartsWit
 	$XMLForm.FlowDirection = "RightToLeft"
 }
 $WindowsVersionTitle.Text = Get-Translation("Version")
-$Confirm.Content = Get-Translation("Confirm")
+$Continue.Content = Get-Translation("Continue")
 $Back.Content = Get-Translation("Cancel")
 
 # Populate the Windows versions
@@ -463,16 +447,16 @@ $WindowsVersion.ItemsSource = $array
 $WindowsVersion.DisplayMemberPath = "Version"
 
 # Button Action
-$Confirm.add_click({
+$Continue.add_click({
 	if ($script:Stage++ -lt 0) {
 		Get-Process -Id $pid | Foreach-Object { $_.CloseMainWindow() | Out-Null }
 		return
 	}
 
 	$XMLGrid.Children[2 * $Stage + 1].IsEnabled = $False
-	$Confirm.IsEnabled = $False
+	$Continue.IsEnabled = $False
 	$Back.IsEnabled = $False
-	Refresh-Control($Confirm)
+	Refresh-Control($Continue)
 	Refresh-Control($Back)
 
 	switch ($Stage) {
@@ -485,21 +469,19 @@ $Confirm.add_click({
 			$url += $WindowsVersion.SelectedValue.PageType
 			Write-Host Querying $url
 
-			if (-not $Testing) {
-				try {
-					$r = Invoke-WebRequest -SessionVariable "Session" $url
-					$script:SessionId = $r.ParsedHtml.IHTMLDocument3_GetElementById("session-id").Value
-					if (-not $SessionId) {
-						$ErrorMessage = $r.ParsedHtml.IHTMLDocument3_GetElementByID("errorModalMessage").innerHtml
-						if ($ErrorMessage) {
-							Write-Host "$(Get-Translation("Error")): ""$ErrorMessage"""
-						}
-						throw "Could not read Session ID"
+			try {
+				$r = Invoke-WebRequest -SessionVariable "Session" $url
+				$script:SessionId = $r.ParsedHtml.IHTMLDocument3_GetElementById("session-id").Value
+				if (-not $SessionId) {
+					$ErrorMessage = $r.ParsedHtml.IHTMLDocument3_GetElementByID("errorModalMessage").innerHtml
+					if ($ErrorMessage) {
+						Write-Host "$(Get-Translation("Error")): ""$ErrorMessage"""
 					}
-				} catch {
-					Error($_.Exception.Message)
-					return
+					throw "Could not read Session ID"
 				}
+			} catch {
+				Error($_.Exception.Message)
+				return
 			}
 
 			$i = 0
@@ -530,8 +512,6 @@ $Confirm.add_click({
 		}
 
 		3 { # Product Edition selection => Request and populate Languages
-
-			# Get the Product Edition
 			$url = "https://www.microsoft.com/" + $Locale + "/api/controls/contentinclude/html"
 			$url += "?pageId=" + $RequestData["GetLangs"][0]
 			$url += "&host=www.microsoft.com"
@@ -545,41 +525,28 @@ $Confirm.add_click({
 			$array = @()
 			$i = 0
 			$SelectedIndex = 0
-			if (-not $Testing) {
-				try {
-					$r = Invoke-WebRequest -WebSession $Session $url
-					foreach ($var in $r.ParsedHtml.IHTMLDocument3_GetElementByID("product-languages")) {
-						if ($Debug) {
-							Write-Host  $var.value $var.text
+			try {
+				$r = Invoke-WebRequest -WebSession $Session $url
+				foreach ($var in $r.ParsedHtml.IHTMLDocument3_GetElementByID("product-languages")) {
+					$json = $var.value | ConvertFrom-Json;
+					if ($json) {
+						$array += @(New-Object PsObject -Property @{ DisplayLanguage = $var.text; Language = $json.language; Id = $json.id })
+						if (Select-Language($json.language)) {
+							$SelectedIndex = $i
 						}
-						$json = $var.value | ConvertFrom-Json;
-						if ($json) {
-							$array += @(New-Object PsObject -Property @{ DisplayLanguage = $var.text; Language = $json.language; Id = $json.id })
-							if (Select-Language($json.language)) {
-								$SelectedIndex = $i
-							}
-							$i++
-						}
+						$i++
 					}
-					if ($array.Length -eq 0) {
-						$ErrorMessage = $r.ParsedHtml.IHTMLDocument3_GetElementByID("errorModalMessage").innerHtml
-						if ($ErrorMessage) {
-							Write-Host "$(Get-Translation("Error")): ""$ErrorMessage"""
-						}
-						throw "Could not parse languages"
-					}
-				} catch {
-					Error($_.Exception.Message)
-					return
 				}
-			} else {
-				foreach ($var in $(ConvertFrom-Json –InputObject $TestLangs).languages) {
-					$array += @(New-Object PsObject -Property @{ DisplayLanguage = $var.text; Language = $var.language; Id = $var.id })
-					if (Select-Language($var.language)) {
-						$SelectedIndex = $i
+				if ($array.Length -eq 0) {
+					$ErrorMessage = $r.ParsedHtml.IHTMLDocument3_GetElementByID("errorModalMessage").innerHtml
+					if ($ErrorMessage) {
+						Write-Host "$(Get-Translation("Error")): ""$ErrorMessage"""
 					}
-					$i++
+					throw "Could not parse languages"
 				}
+			} catch {
+				Error($_.Exception.Message)
+				return
 			}
 			$script:Language = Add-Entry $Stage "Language" $array "DisplayLanguage"
 			$Language.SelectedIndex = $SelectedIndex
@@ -600,64 +567,55 @@ $Confirm.add_click({
 			$i = 0
 			$SelectedIndex = 0
 			$array = @()
-			if (-not $Testing) {
-				try {
-					$r = Invoke-WebRequest -WebSession $Session $url
-					foreach ($var in $r.ParsedHtml.IHTMLDocument3_GetElementsByTagName("span") | Where-Object { $_.className -eq "product-download-type" }) {
-						$Link =  $var.ParentNode | Select -Expand href
-						$Type = $var.innerText
-						# Maybe Microsoft will provide public ARM/ARM64 retail ISOs one day...
-						if ($Type -like "*arm64*") {
-							$Type = "Arm64"
-							if ($ENV:PROCESSOR_ARCHITECTURE -eq "ARM64") {
-								$SelectedIndex = $i
-							}
-						} elseif ($Type -like "*arm*") {
-							$Type = "Arm"
-							if ($ENV:PROCESSOR_ARCHITECTURE -eq "ARM") {
-								$SelectedIndex = $i
-							}
-						} elseif ($Type -like "*x64*") {
-							$Type = "x64"
-							if ($ENV:PROCESSOR_ARCHITECTURE -eq "AMD64") {
-								$SelectedIndex = $i
-							}
-						} elseif ($Type -like "*x86*") {
-							$Type = "x86"
-							if ($ENV:PROCESSOR_ARCHITECTURE -eq "X86") {
-								$SelectedIndex = $i
-							}
+			try {
+				$r = Invoke-WebRequest -WebSession $Session $url
+				foreach ($var in $r.ParsedHtml.IHTMLDocument3_GetElementsByTagName("span") | Where-Object { $_.className -eq "product-download-type" }) {
+					$Link =  $var.ParentNode | Select -Expand href
+					$Type = $var.innerText
+					# Maybe Microsoft will provide public ARM/ARM64 retail ISOs one day...
+					if ($Type -like "*arm64*") {
+						$Type = "Arm64"
+						if ($ENV:PROCESSOR_ARCHITECTURE -eq "ARM64") {
+							$SelectedIndex = $i
 						}
-						$array += @(New-Object PsObject -Property @{ Type = $Type; Link = $Link })
-						$i++
-					}
-					if ($array.Length -eq 0) {
-						$ErrorMessage = $r.ParsedHtml.IHTMLDocument3_GetElementByID("errorModalMessage").innerHtml
-						if ($ErrorMessage) {
-							Write-Host "$(Get-Translation("Error")): ""$ErrorMessage"""
+					} elseif ($Type -like "*arm*") {
+						$Type = "Arm"
+						if ($ENV:PROCESSOR_ARCHITECTURE -eq "ARM") {
+							$SelectedIndex = $i
 						}
-						throw "Could not retreive ISO download links"
+					} elseif ($Type -like "*x64*") {
+						$Type = "x64"
+						if ($ENV:PROCESSOR_ARCHITECTURE -eq "AMD64") {
+							$SelectedIndex = $i
+						}
+					} elseif ($Type -like "*x86*") {
+						$Type = "x86"
+						if ($ENV:PROCESSOR_ARCHITECTURE -eq "X86") {
+							$SelectedIndex = $i
+						}
 					}
-				} catch {
-					Error($_.Exception.Message)
-					return
+					$array += @(New-Object PsObject -Property @{ Type = $Type; Link = $Link })
+					$i++
 				}
-			} else {
-				$array += @(New-Object PsObject -Property @{ Type = "x86"; Link = "https://software-download.microsoft.com/sg/Win10_1809Oct_English_x86.iso" })
-				$i++
-				$array += @(New-Object PsObject -Property @{ Type = "x64"; Link = "https://software-download.microsoft.com/sg/Win10_1809Oct_English_x64.iso" })
-				if ($ENV:PROCESSOR_ARCHITECTURE -eq "AMD64") {
-					$SelectedIndex = $i
+				if ($array.Length -eq 0) {
+					$ErrorMessage = $r.ParsedHtml.IHTMLDocument3_GetElementByID("errorModalMessage").innerHtml
+					if ($ErrorMessage) {
+						Write-Host "$(Get-Translation("Error")): ""$ErrorMessage"""
+					}
+					throw "Could not retreive ISO download links"
 				}
+			} catch {
+				Error($_.Exception.Message)
+				return
 			}
 
 			$script:Arch = Add-Entry $Stage "Architecture" $array "Type"
-			if (($PipeName -or $Testing) -and $ShowBrowserOption) {
+			if ($PipeName) {
 				$XMLForm.Height += $dh / 2;
-				$Margin = $Confirm.Margin
+				$Margin = $Continue.Margin
 				$top = $Margin.Top
 				$Margin.Top += $dh /2
-				$Confirm.Margin = $Margin
+				$Continue.Margin = $Margin
 				$Margin = $Back.Margin
 				$Margin.Top += $dh / 2
 				$Back.Margin = $Margin
@@ -668,7 +626,7 @@ $Confirm.add_click({
 				$Check.Visibility = "Visible"
 			}
 			$Arch.SelectedIndex = $SelectedIndex
-			$Confirm.Content = Get-Translation("Download")
+			$Continue.Content = Get-Translation("Download")
 		}
 
 		5 { # Arch selection => Return selected download link
@@ -682,7 +640,7 @@ $Confirm.add_click({
 			$XMLForm.Close()
 		}
 	}
-	$Confirm.IsEnabled = $True
+	$Continue.IsEnabled = $True
 	if ($Stage -ge 0) {
 		$Back.IsEnabled = $True;
 	}
@@ -696,14 +654,14 @@ $Back.add_click({
 		$XMLGrid.Children.RemoveAt(2 * $Stage + 2)
 		$XMLGrid.Children[2 * $Stage + 1].IsEnabled = $True
 		$dh2 = $dh
-		if ($Stage -eq 4 -and $ShowBrowserOption) {
+		if ($Stage -eq 4 -and $PipeName) {
 			$Check.Visibility = "Collapsed"
 			$dh2 += $dh / 2
 		}
 		$XMLForm.Height -= $dh2;
-		$Margin = $Confirm.Margin
+		$Margin = $Continue.Margin
 		$Margin.Top -= $dh2
-		$Confirm.Margin = $Margin
+		$Continue.Margin = $Margin
 		$Margin = $Back.Margin
 		$Margin.Top -= $dh2
 		$Back.Margin = $Margin
@@ -711,29 +669,33 @@ $Back.add_click({
 		if ($Stage -eq 0) {
 			$Back.Content = Get-Translation("Cancel")
 		} elseif ($Stage -eq 3) {
-			$Confirm.Content = Get-Translation("Confirm")
+			$Continue.Content = Get-Translation("Continue")
 		}
 	}
 })
 
-# We need a job in the background to close the obnoxious "Do you want to accept this cookie?" Windows alerts
-$ClosePrompt = {
-	param($PromptTitle)
-	while ($True) {
-		Get-Process | Where-Object { $_.MainWindowTitle -match $PromptTitle } | ForEach-Object { $_.CloseMainWindow() }
-		Start-Sleep -Milliseconds 100
+if (-not $PipeName) {
+	# We need a job in the background to close the obnoxious "Do you want to accept this cookie?" Windows alerts
+	$ClosePrompt = {
+		param($PromptTitle)
+		while ($True) {
+			Get-Process | Where-Object { $_.MainWindowTitle -match $PromptTitle } | ForEach-Object { $_.CloseMainWindow() }
+			Start-Sleep -Milliseconds 100
+		}
 	}
+	# Get the localized version of the 'Windows Security Warning' title of the cookie prompt
+	$SecurityWarningTitle = [Gui.Utils]::GetMuiString("urlmon.dll", 2070)
+	if (-not $SecurityWarningTitle) {
+		$SecurityWarningTitle = "Windows Security Warning"
+	}
+	$Job = Start-Job -ScriptBlock $ClosePrompt -ArgumentList $SecurityWarningTitle
 }
-# Get the localized version of the 'Windows Security Warning' title of the cookie prompt
-$SecurityWarningTitle = [Gui.Utils]::GetMuiString("urlmon.dll", 2070)
-if (-not $SecurityWarningTitle) {
-	$SecurityWarningTitle = "Windows Security Warning"
-}
-$Job = Start-Job -ScriptBlock $ClosePrompt -ArgumentList $SecurityWarningTitle
 
 # Display the dialog
 $XMLForm.ShowDialog() | Out-Null
 
 # Clean up & exit
-Stop-Job -Job $Job
+if (-not $PipeName) {
+	Stop-Job -Job $Job
+}
 exit $ExitCode
