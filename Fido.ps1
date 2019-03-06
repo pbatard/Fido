@@ -1,5 +1,5 @@
 ﻿#
-# Fido v1.01 - Retail Windows ISO Downloader
+# Fido v1.02 - Retail Windows ISO Downloader
 # Copyright © 2019 Pete Batard <pete@akeo.ie>
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
 #
@@ -692,6 +692,7 @@ if (-not $PipeName) {
 }
 
 # Display the dialog
+$XMLForm.Add_Loaded( { $XMLForm.Activate() } )
 $XMLForm.ShowDialog() | Out-Null
 
 # Clean up & exit
