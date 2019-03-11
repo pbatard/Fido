@@ -1,5 +1,5 @@
 ﻿#
-# Fido v1.02 - Retail Windows ISO Downloader
+# Fido v1.03 - Retail Windows ISO Downloader
 # Copyright © 2019 Pete Batard <pete@akeo.ie>
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
 #
@@ -31,6 +31,10 @@ param(
 	# (Optional) Name of a pipe the download URL should be sent to.
 	# If not provided, a browser window is opened instead.
 	[string]$PipeName,
+	# (Optional) Disable IE First Run Customize so that Invoke-WebRequest
+	# doesn't throw an exception if the user has never launched IE.
+	# Note that this requires the script to run elevated.
+	[switch]$DisableFirstRunCustomize,
 	# (Optional) Toggle expert mode (additional ISOs to choose).
 	[switch]$Expert = $False
 )
@@ -80,6 +84,13 @@ Add-Type -AssemblyName PresentationFramework
 # Hide the powershell window: https://stackoverflow.com/a/27992426/1069307
 [Gui.Utils]::ShowWindow(([System.Diagnostics.Process]::GetCurrentProcess() | Get-Process).MainWindowHandle, 0) | Out-Null
 #endregion
+
+# Make sure PowerShell 3.0 or later is used (for Invoke-WebRequest)
+if ($PSVersionTable.PSVersion.Major -lt 3) {
+	Write-Host Error: PowerShell 3.0 or later is required to run this script.
+	[System.Windows.MessageBox]::Show("PowerShell 3.0 or later is required to run this script.`nYou can download it from: https://www.microsoft.com/en-us/download/details.aspx?id=34595", "Error", "OK", "Error") | Out-Null
+	exit -1
+}
 
 #region Data
 $WindowsVersions = @(
@@ -366,6 +377,17 @@ function Get-Translation([string]$Text)
 	return $Text
 }
 
+# Some PowerShells don't have Microsoft.mshtml assembly (comes with MS Office?)
+# so we can't use ParsedHtml or IHTMLDocument[2|3] features there...
+function GetElementById([object]$Request, [string]$Id)
+{
+	try {
+		return $Request.ParsedHtml.IHTMLDocument3_GetElementByID($Id)
+	} catch {
+		return $Request.AllElements | ? {$_.id -eq $Id}
+	}
+}
+
 function Error([string]$ErrorMessage)
 {
 	Write-Host $ErrorMessage
@@ -377,6 +399,17 @@ function Error([string]$ErrorMessage)
 	$script:ExitCode = $Stage
 	$script:Stage = -1
 	$Continue.IsEnabled = $True
+}
+
+function Get-RandomDate()
+{
+	[DateTime]$Min = "1/1/2008"
+	[DateTime]$Max = [DateTime]::Now
+
+	$RandomGen = new-object random
+	$RandomTicks = [Convert]::ToInt64( ($Max.ticks * 1.0 - $Min.Ticks * 1.0 ) * $RandomGen.NextDouble() + $Min.Ticks * 1.0 )
+	$Date = new-object DateTime($RandomTicks)
+	return $Date.ToString("yyyyMMdd")
 }
 #endregion
 
@@ -401,14 +434,20 @@ $MaxStage = 4
 $SessionId = ""
 $ExitCode = -1
 $Locale = "en-US"
-
+$DFRCKey = "HKLM:\Software\Policies\Microsoft\Internet Explorer\Main\"
+$DFRCName = "DisableFirstRunCustomize"
+$DFRCAdded = $False
 $RequestData = @{}
-$RequestData["GetLangs"] = @("a8f8f489-4c7f-463a-9ca6-5cff94d8d041", "GetSkuInformationByProductEdition" )
+$RequestData["GetLangs"] = @("a8f8f489-4c7f-463a-9ca6-5cff94d8d041", "getskuinformationbyproductedition" )
 $RequestData["GetLinks"] = @("cfa9e580-a81e-4a4b-a846-7b21bf4e2e5b", "GetProductDownloadLinksBySku" )
+# Create a semi-random Linux User-Agent string
+$FirefoxVersion = Get-Random -Minimum 30 -Maximum 60
+$FirefoxDate = Get-RandomDate
+$UserAgent = "Mozilla/5.0 (X11; Linux i586; rv:$FirefoxVersion.0) Gecko/$FirefoxDate Firefox/$FirefoxVersion.0"
 #endregion
 
 # Localization
-$EnglishMessages = "en-US|Version|Release|Edition|Language|Architecture|Download|Continue|Back|Close|Cancel|Error|Please wait...|Download using a browser"
+$EnglishMessages = "en-US|Version|Release|Edition|Language|Architecture|Download|Continue|Back|Close|Cancel|Error|Please wait...|Download using a browser|Temporarily banned by Microsoft for requesting too many downloads - Please try again later..."
 [string[]]$English = $EnglishMessages.Split('|')
 [string[]]$Localized = $null
 if ($LocData -and (-not $LocData.StartsWith("en-US"))) {
@@ -418,6 +457,20 @@ if ($LocData -and (-not $LocData.StartsWith("en-US"))) {
 		exit 1
 	}
 	$Locale = $Localized[0]
+}
+
+# If asked, disable IE first run customize as it interferes with Invoke-WebRequest
+if ($DisableFirstRunCustomize) {
+	try {
+		# Only create the key if it doesn't already exist
+		Get-ItemProperty -Path $DFRCKey -Name $DFRCName -ErrorActionPreference "Stop"
+	} catch {
+		if (-not (Test-Path $DFRCKey)) {
+			New-Item -Path $DFRCKey -Force | Out-Null
+		}
+		Set-ItemProperty -Path $DFRCKey -Name $DFRCName -Value 1
+		$DFRCAdded = $True
+	}
 }
 
 # Form creation
@@ -470,10 +523,12 @@ $Continue.add_click({
 			Write-Host Querying $url
 
 			try {
-				$r = Invoke-WebRequest -SessionVariable "Session" $url
-				$script:SessionId = $r.ParsedHtml.IHTMLDocument3_GetElementById("session-id").Value
+				# Note: We can't use -UseBasicParsing since we need JS to create the session-id
+				# TODO: Use  -Headers @{"Cache-Control"="no-cache"}?
+				$r = Invoke-WebRequest -UserAgent $UserAgent -SessionVariable "Session" $url
+				$script:SessionId = $(GetElementById -Request $r -Id "session-id").Value
 				if (-not $SessionId) {
-					$ErrorMessage = $r.ParsedHtml.IHTMLDocument3_GetElementByID("errorModalMessage").innerHtml
+					$ErrorMessage = $(GetElementById -Request $r -Id "errorModalMessage").InnerText
 					if ($ErrorMessage) {
 						Write-Host "$(Get-Translation("Error")): ""$ErrorMessage"""
 					}
@@ -526,11 +581,18 @@ $Continue.add_click({
 			$i = 0
 			$SelectedIndex = 0
 			try {
-				$r = Invoke-WebRequest -WebSession $Session $url
-				foreach ($var in $r.ParsedHtml.IHTMLDocument3_GetElementByID("product-languages")) {
+				$r = Invoke-WebRequest -UserAgent $UserAgent -WebSession $Session $url
+				# Go through an XML conversion to keep all PowerShells happy...
+				if (-not $($r.AllElements | ? {$_.id -eq "product-languages"})) {
+					throw "Unexpected server response"
+				}
+				$html = $($r.AllElements | ? {$_.id -eq "product-languages"}).InnerHTML
+				$html = "<options>" + $html.Replace("selected value", "value") + "</options>"
+				$xml = [xml]$html
+				foreach ($var in $xml.options.option) {
 					$json = $var.value | ConvertFrom-Json;
 					if ($json) {
-						$array += @(New-Object PsObject -Property @{ DisplayLanguage = $var.text; Language = $json.language; Id = $json.id })
+						$array += @(New-Object PsObject -Property @{ DisplayLanguage = $var.InnerText; Language = $json.language; Id = $json.id })
 						if (Select-Language($json.language)) {
 							$SelectedIndex = $i
 						}
@@ -538,7 +600,7 @@ $Continue.add_click({
 					}
 				}
 				if ($array.Length -eq 0) {
-					$ErrorMessage = $r.ParsedHtml.IHTMLDocument3_GetElementByID("errorModalMessage").innerHtml
+					$ErrorMessage = $(GetElementById -Request $r -Id "errorModalMessage").innerText
 					if ($ErrorMessage) {
 						Write-Host "$(Get-Translation("Error")): ""$ErrorMessage"""
 					}
@@ -568,37 +630,55 @@ $Continue.add_click({
 			$SelectedIndex = 0
 			$array = @()
 			try {
-				$r = Invoke-WebRequest -WebSession $Session $url
-				foreach ($var in $r.ParsedHtml.IHTMLDocument3_GetElementsByTagName("span") | Where-Object { $_.className -eq "product-download-type" }) {
-					$Link =  $var.ParentNode | Select -Expand href
-					$Type = $var.innerText
-					# Maybe Microsoft will provide public ARM/ARM64 retail ISOs one day...
-					if ($Type -like "*arm64*") {
-						$Type = "Arm64"
-						if ($ENV:PROCESSOR_ARCHITECTURE -eq "ARM64") {
-							$SelectedIndex = $i
-						}
-					} elseif ($Type -like "*arm*") {
-						$Type = "Arm"
-						if ($ENV:PROCESSOR_ARCHITECTURE -eq "ARM") {
-							$SelectedIndex = $i
-						}
-					} elseif ($Type -like "*x64*") {
-						$Type = "x64"
-						if ($ENV:PROCESSOR_ARCHITECTURE -eq "AMD64") {
-							$SelectedIndex = $i
-						}
-					} elseif ($Type -like "*x86*") {
-						$Type = "x86"
-						if ($ENV:PROCESSOR_ARCHITECTURE -eq "X86") {
-							$SelectedIndex = $i
-						}
+				$r = Invoke-WebRequest -UserAgent $UserAgent -WebSession $Session $url
+				if (-not $($r.AllElements | ? {$_.id -eq "expiration-time"})) {
+					$ErrorMessage = $(GetElementById -Request $r -Id "errorModalMessage").innerText
+					if ($ErrorMessage) {
+						Write-Host "$(Get-Translation("Error")): ""$ErrorMessage"""
 					}
-					$array += @(New-Object PsObject -Property @{ Type = $Type; Link = $Link })
-					$i++
+					throw  Get-Translation($English[14])
+				}
+				$html = $($r.AllElements | ? {$_.tagname -eq "input"}).outerHTML
+				# Need to fix the HTML and JSON data so that it is well-formed
+				$html = $html.Replace("class=product-download-hidden", "")
+				$html = $html.Replace("type=hidden", "")
+				$html = $html.Replace(">", "/>")
+				$html = $html.Replace(": I", ": ""I")
+				$html = $html.Replace(" }", """ }")
+				$html = "<inputs>" + $html + "</inputs>"
+				$xml = [xml]$html
+				foreach ($var in $xml.inputs.input) {
+					$json = $var.value | ConvertFrom-Json;
+					if ($json) {
+						$Type = $json.DownloadType
+						# Maybe Microsoft will provide public ARM/ARM64 retail ISOs one day...
+						if ($Type -like "*arm64*") {
+							$Type = "Arm64"
+							if ($ENV:PROCESSOR_ARCHITECTURE -eq "ARM64") {
+								$SelectedIndex = $i
+							}
+						} elseif ($Type -like "*arm*") {
+							$Type = "Arm"
+							if ($ENV:PROCESSOR_ARCHITECTURE -eq "ARM") {
+								$SelectedIndex = $i
+							}
+						} elseif ($Type -like "*x64*") {
+							$Type = "x64"
+							if ($ENV:PROCESSOR_ARCHITECTURE -eq "AMD64") {
+								$SelectedIndex = $i
+							}
+						} elseif ($Type -like "*x86*") {
+							$Type = "x86"
+							if ($ENV:PROCESSOR_ARCHITECTURE -eq "X86") {
+								$SelectedIndex = $i
+							}
+						}
+						$array += @(New-Object PsObject -Property @{ Type = $Type; Link = $json.Uri })
+						$i++
+					}
 				}
 				if ($array.Length -eq 0) {
-					$ErrorMessage = $r.ParsedHtml.IHTMLDocument3_GetElementByID("errorModalMessage").innerHtml
+					$ErrorMessage = $(GetElementById -Request $r -Id "errorModalMessage").innerText
 					if ($ErrorMessage) {
 						Write-Host "$(Get-Translation("Error")): ""$ErrorMessage"""
 					}
@@ -698,5 +778,8 @@ $XMLForm.ShowDialog() | Out-Null
 # Clean up & exit
 if (-not $PipeName) {
 	Stop-Job -Job $Job
+}
+if ($DFRCAdded) {
+	Remove-ItemProperty -Path $DFRCKey -Name $DFRCName
 }
 exit $ExitCode
