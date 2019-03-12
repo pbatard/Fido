@@ -1,5 +1,5 @@
 ﻿#
-# Fido v1.03 - Retail Windows ISO Downloader
+# Fido v1.04 - Retail Windows ISO Downloader
 # Copyright © 2019 Pete Batard <pete@akeo.ie>
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
 #
@@ -84,13 +84,6 @@ Add-Type -AssemblyName PresentationFramework
 # Hide the powershell window: https://stackoverflow.com/a/27992426/1069307
 [Gui.Utils]::ShowWindow(([System.Diagnostics.Process]::GetCurrentProcess() | Get-Process).MainWindowHandle, 0) | Out-Null
 #endregion
-
-# Make sure PowerShell 3.0 or later is used (for Invoke-WebRequest)
-if ($PSVersionTable.PSVersion.Major -lt 3) {
-	Write-Host Error: PowerShell 3.0 or later is required to run this script.
-	[System.Windows.MessageBox]::Show("PowerShell 3.0 or later is required to run this script.`nYou can download it from: https://www.microsoft.com/en-us/download/details.aspx?id=34595", "Error", "OK", "Error") | Out-Null
-	exit -1
-}
 
 #region Data
 $WindowsVersions = @(
@@ -447,7 +440,9 @@ $UserAgent = "Mozilla/5.0 (X11; Linux i586; rv:$FirefoxVersion.0) Gecko/$Firefox
 #endregion
 
 # Localization
-$EnglishMessages = "en-US|Version|Release|Edition|Language|Architecture|Download|Continue|Back|Close|Cancel|Error|Please wait...|Download using a browser|Temporarily banned by Microsoft for requesting too many downloads - Please try again later..."
+$EnglishMessages = "en-US|Version|Release|Edition|Language|Architecture|Download|Continue|Back|Close|Cancel|Error|Please wait...|" +
+	"Download using a browser|Temporarily banned by Microsoft for requesting too many downloads - Please try again later...|" +
+	"PowerShell 3.0 or later is required to run this script.|Do you want to go online and download it?"
 [string[]]$English = $EnglishMessages.Split('|')
 [string[]]$Localized = $null
 if ($LocData -and (-not $LocData.StartsWith("en-US"))) {
@@ -459,7 +454,17 @@ if ($LocData -and (-not $LocData.StartsWith("en-US"))) {
 	$Locale = $Localized[0]
 }
 
-# If asked, disable IE first run customize as it interferes with Invoke-WebRequest
+# Make sure PowerShell 3.0 or later is used (for Invoke-WebRequest)
+if ($PSVersionTable.PSVersion.Major -lt 3) {
+	Write-Host Error: PowerShell 3.0 or later is required to run this script.
+	$Msg = "$(Get-Translation($English[15]))`n$(Get-Translation($English[16]))"
+	if ([System.Windows.MessageBox]::Show($Msg, $(Get-Translation("Error")), "YesNo", "Error") -eq "Yes") {
+		Start-Process -FilePath https://www.microsoft.com/download/details.aspx?id=34595
+	}
+	exit -1
+}
+
+# If asked, disable IE's first run customize prompt as it interferes with Invoke-WebRequest
 if ($DisableFirstRunCustomize) {
 	try {
 		# Only create the key if it doesn't already exist
@@ -487,7 +492,7 @@ if ($Locale.StartsWith("ar") -or  $Locale.StartsWith("fa") -or $Locale.StartsWit
 }
 $WindowsVersionTitle.Text = Get-Translation("Version")
 $Continue.Content = Get-Translation("Continue")
-$Back.Content = Get-Translation("Cancel")
+$Back.Content = Get-Translation("Close")
 
 # Populate the Windows versions
 $i = 0
@@ -747,7 +752,7 @@ $Back.add_click({
 		$Back.Margin = $Margin
 		$script:Stage = $Stage - 1
 		if ($Stage -eq 0) {
-			$Back.Content = Get-Translation("Cancel")
+			$Back.Content = Get-Translation("Close")
 		} elseif ($Stage -eq 3) {
 			$Continue.Content = Get-Translation("Continue")
 		}
