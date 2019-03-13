@@ -1,5 +1,5 @@
 ﻿#
-# Fido v1.04 - Retail Windows ISO Downloader
+# Fido v1.05 - Retail Windows ISO Downloader
 # Copyright © 2019 Pete Batard <pete@akeo.ie>
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
 #
@@ -421,11 +421,12 @@ function Get-RandomDate()
 #endregion
 
 #region Globals
+$ErrorActionPreference = "Stop"
 $dh = 58;
 $Stage = 0
 $MaxStage = 4
 $SessionId = ""
-$ExitCode = -1
+$ExitCode = 100
 $Locale = "en-US"
 $DFRCKey = "HKLM:\Software\Policies\Microsoft\Internet Explorer\Main\"
 $DFRCName = "DisableFirstRunCustomize"
@@ -449,9 +450,17 @@ if ($LocData -and (-not $LocData.StartsWith("en-US"))) {
 	$Localized = $LocData.Split('|')
 	if ($Localized.Length -ne $English.Length) {
 		Write-Host "Error: Missing or extra translated messages provided ($($Localized.Length)/$($English.Length))"
-		exit 1
+		exit 101
 	}
 	$Locale = $Localized[0]
+}
+# Test if the Microsoft servers can handle our locale. If not, fall back to en-US.
+$QueryLocale = $Locale
+try {
+	$url = "https://www.microsoft.com/" + $QueryLocale + "/software-download/"
+	Invoke-WebRequest -UseBasicParsing -MaximumRedirection 0 -UserAgent $UserAgent $url | Out-Null
+} catch {
+	$QueryLocale = "en-US"
 }
 
 # Make sure PowerShell 3.0 or later is used (for Invoke-WebRequest)
@@ -461,14 +470,14 @@ if ($PSVersionTable.PSVersion.Major -lt 3) {
 	if ([System.Windows.MessageBox]::Show($Msg, $(Get-Translation("Error")), "YesNo", "Error") -eq "Yes") {
 		Start-Process -FilePath https://www.microsoft.com/download/details.aspx?id=34595
 	}
-	exit -1
+	exit 102
 }
 
 # If asked, disable IE's first run customize prompt as it interferes with Invoke-WebRequest
 if ($DisableFirstRunCustomize) {
 	try {
 		# Only create the key if it doesn't already exist
-		Get-ItemProperty -Path $DFRCKey -Name $DFRCName -ErrorActionPreference "Stop"
+		Get-ItemProperty -Path $DFRCKey -Name $DFRCName
 	} catch {
 		if (-not (Test-Path $DFRCKey)) {
 			New-Item -Path $DFRCKey -Force | Out-Null
@@ -523,7 +532,7 @@ $Continue.add_click({
 			$XMLForm.Title = Get-Translation($English[12])
 			Refresh-Control($XMLForm)
 
-			$url = "https://www.microsoft.com/" + $Locale + "/software-download/"
+			$url = "https://www.microsoft.com/" + $QueryLocale + "/software-download/"
 			$url += $WindowsVersion.SelectedValue.PageType
 			Write-Host Querying $url
 
@@ -572,7 +581,7 @@ $Continue.add_click({
 		}
 
 		3 { # Product Edition selection => Request and populate Languages
-			$url = "https://www.microsoft.com/" + $Locale + "/api/controls/contentinclude/html"
+			$url = "https://www.microsoft.com/" + $QueryLocale + "/api/controls/contentinclude/html"
 			$url += "?pageId=" + $RequestData["GetLangs"][0]
 			$url += "&host=www.microsoft.com"
 			$url += "&segments=software-download," + $WindowsVersion.SelectedValue.PageType
@@ -592,7 +601,9 @@ $Continue.add_click({
 					throw "Unexpected server response"
 				}
 				$html = $($r.AllElements | ? {$_.id -eq "product-languages"}).InnerHTML
-				$html = "<options>" + $html.Replace("selected value", "value") + "</options>"
+				$html = $html.Replace("selected value", "value")
+				$html = $html.Replace("&", "&amp;")
+				$html = "<options>" + $html + "</options>"
 				$xml = [xml]$html
 				foreach ($var in $xml.options.option) {
 					$json = $var.value | ConvertFrom-Json;
@@ -620,7 +631,7 @@ $Continue.add_click({
 		}
 
 		4 { # Language selection => Request and populate Arch download links
-			$url = "https://www.microsoft.com/" + $Locale + "/api/controls/contentinclude/html"
+			$url = "https://www.microsoft.com/" + $QueryLocale + "/api/controls/contentinclude/html"
 			$url += "?pageId=" + $RequestData["GetLinks"][0]
 			$url += "&host=www.microsoft.com"
 			$url += "&segments=software-download," + $WindowsVersion.SelectedValue.PageType
@@ -656,25 +667,14 @@ $Continue.add_click({
 					$json = $var.value | ConvertFrom-Json;
 					if ($json) {
 						$Type = $json.DownloadType
-						# Maybe Microsoft will provide public ARM/ARM64 retail ISOs one day...
-						if ($Type -like "*arm64*") {
-							$Type = "Arm64"
-							if ($ENV:PROCESSOR_ARCHITECTURE -eq "ARM64") {
-								$SelectedIndex = $i
-							}
-						} elseif ($Type -like "*arm*") {
-							$Type = "Arm"
-							if ($ENV:PROCESSOR_ARCHITECTURE -eq "ARM") {
-								$SelectedIndex = $i
-							}
-						} elseif ($Type -like "*x64*") {
+						if ($Type -eq "IsoX64") {
 							$Type = "x64"
-							if ($ENV:PROCESSOR_ARCHITECTURE -eq "AMD64") {
+							if ($env:PROCESSOR_ARCHITECTURE -eq "AMD64") {
 								$SelectedIndex = $i
 							}
-						} elseif ($Type -like "*x86*") {
+						} elseif ($Type -eq "IsoX86") {
 							$Type = "x86"
-							if ($ENV:PROCESSOR_ARCHITECTURE -eq "X86") {
+							if ($env:PROCESSOR_ARCHITECTURE -eq "X86") {
 								$SelectedIndex = $i
 							}
 						}
