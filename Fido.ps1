@@ -1,5 +1,5 @@
 ﻿#
-# Fido v1.05 - Retail Windows ISO Downloader
+# Fido v1.06 - Retail Windows ISO Downloader
 # Copyright © 2019 Pete Batard <pete@akeo.ie>
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
 #
@@ -44,27 +44,10 @@ Write-Host Please Wait...
 
 #region Assembly Types
 $code = @"
-[DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true, BestFitMapping = false, ThrowOnUnmappableChar = true)]
-	internal static extern IntPtr LoadLibrary(string lpLibFileName);
-[DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true, BestFitMapping = false, ThrowOnUnmappableChar = true)]
-	internal static extern int LoadString(IntPtr hInstance, uint wID, StringBuilder lpBuffer, int nBufferMax);
 [DllImport("shell32.dll", CharSet = CharSet.Auto, SetLastError = true, BestFitMapping = false, ThrowOnUnmappableChar = true)]
 	internal static extern int ExtractIconEx(string sFile, int iIndex, out IntPtr piLargeVersion, out IntPtr piSmallVersion, int amountIcons);
 [DllImport("user32.dll")]
 	public static extern bool ShowWindow(IntPtr handle, int state);
-
-	// Returns a localized MUI string from the specified DLL
-	public static string GetMuiString(string dll, uint index)
-	{
-		int MAX_PATH = 255;
-		string muiPath = Environment.SystemDirectory + @"\" + CultureInfo.CurrentUICulture.Name + @"\" + dll + ".mui";
-		if (!File.Exists(muiPath))
-			muiPath = Environment.SystemDirectory + @"\en-US\" + dll + ".mui";
-		IntPtr hMui = LoadLibrary(muiPath);
-		StringBuilder szString = new StringBuilder(MAX_PATH);
-		LoadString(hMui, (uint)index, szString, MAX_PATH);
-		return szString.ToString();
-	}
 
 	// Extract an icon from a DLL
 	public static Icon ExtractIcon(string file, int number, bool largeIcon)
@@ -425,7 +408,7 @@ $ErrorActionPreference = "Stop"
 $dh = 58;
 $Stage = 0
 $MaxStage = 4
-$SessionId = ""
+$SessionId = [guid]::NewGuid()
 $ExitCode = 100
 $Locale = "en-US"
 $DFRCKey = "HKLM:\Software\Policies\Microsoft\Internet Explorer\Main\"
@@ -528,31 +511,7 @@ $Continue.add_click({
 
 	switch ($Stage) {
 
-		1 { # Windows Version selection => Get a Session ID and populate Windows Release
-			$XMLForm.Title = Get-Translation($English[12])
-			Refresh-Control($XMLForm)
-
-			$url = "https://www.microsoft.com/" + $QueryLocale + "/software-download/"
-			$url += $WindowsVersion.SelectedValue.PageType
-			Write-Host Querying $url
-
-			try {
-				# Note: We can't use -UseBasicParsing since we need JS to create the session-id
-				# TODO: Use  -Headers @{"Cache-Control"="no-cache"}?
-				$r = Invoke-WebRequest -UserAgent $UserAgent -SessionVariable "Session" $url
-				$script:SessionId = $(GetElementById -Request $r -Id "session-id").Value
-				if (-not $SessionId) {
-					$ErrorMessage = $(GetElementById -Request $r -Id "errorModalMessage").InnerText
-					if ($ErrorMessage) {
-						Write-Host "$(Get-Translation("Error")): ""$ErrorMessage"""
-					}
-					throw "Could not read Session ID"
-				}
-			} catch {
-				Error($_.Exception.Message)
-				return
-			}
-
+		1 { # Windows Version selection
 			$i = 0
 			$array = @()
 			foreach ($Version in $WindowsVersions[$WindowsVersion.SelectedValue.Index]) {
@@ -564,7 +523,6 @@ $Continue.add_click({
 
 			$script:WindowsRelease = Add-Entry $Stage "Release" $array
 			$Back.Content = Get-Translation($English[8])
-			$XMLForm.Title = $AppTitle
 		}
 
 		2 { # Windows Release selection => Populate Product Edition
@@ -581,6 +539,8 @@ $Continue.add_click({
 		}
 
 		3 { # Product Edition selection => Request and populate Languages
+			$XMLForm.Title = Get-Translation($English[12])
+			Refresh-Control($XMLForm)
 			$url = "https://www.microsoft.com/" + $QueryLocale + "/api/controls/contentinclude/html"
 			$url += "?pageId=" + $RequestData["GetLangs"][0]
 			$url += "&host=www.microsoft.com"
@@ -628,9 +588,12 @@ $Continue.add_click({
 			}
 			$script:Language = Add-Entry $Stage "Language" $array "DisplayLanguage"
 			$Language.SelectedIndex = $SelectedIndex
+			$XMLForm.Title = $AppTitle
 		}
 
 		4 { # Language selection => Request and populate Arch download links
+			$XMLForm.Title = Get-Translation($English[12])
+			Refresh-Control($XMLForm)
 			$url = "https://www.microsoft.com/" + $QueryLocale + "/api/controls/contentinclude/html"
 			$url += "?pageId=" + $RequestData["GetLinks"][0]
 			$url += "&host=www.microsoft.com"
@@ -712,6 +675,7 @@ $Continue.add_click({
 			}
 			$Arch.SelectedIndex = $SelectedIndex
 			$Continue.Content = Get-Translation("Download")
+			$XMLForm.Title = $AppTitle
 		}
 
 		5 { # Arch selection => Return selected download link
@@ -759,31 +723,11 @@ $Back.add_click({
 	}
 })
 
-if (-not $PipeName) {
-	# We need a job in the background to close the obnoxious "Do you want to accept this cookie?" Windows alerts
-	$ClosePrompt = {
-		param($PromptTitle)
-		while ($True) {
-			Get-Process | Where-Object { $_.MainWindowTitle -match $PromptTitle } | ForEach-Object { $_.CloseMainWindow() }
-			Start-Sleep -Milliseconds 100
-		}
-	}
-	# Get the localized version of the 'Windows Security Warning' title of the cookie prompt
-	$SecurityWarningTitle = [Gui.Utils]::GetMuiString("urlmon.dll", 2070)
-	if (-not $SecurityWarningTitle) {
-		$SecurityWarningTitle = "Windows Security Warning"
-	}
-	$Job = Start-Job -ScriptBlock $ClosePrompt -ArgumentList $SecurityWarningTitle
-}
-
 # Display the dialog
 $XMLForm.Add_Loaded( { $XMLForm.Activate() } )
 $XMLForm.ShowDialog() | Out-Null
 
 # Clean up & exit
-if (-not $PipeName) {
-	Stop-Job -Job $Job
-}
 if ($DFRCAdded) {
 	Remove-ItemProperty -Path $DFRCKey -Name $DFRCName
 }
