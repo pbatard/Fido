@@ -19,7 +19,7 @@ As to the reason one might want to download Windows __retail__ ISOs, as opposed 
 Microsoft's own Media Creation Tool (MCT), this is because it is only with an official retail ISO that one can assert
 with complete certainty whether its content has been altered in any way or not. Indeed, retail Microsoft's ISOs are the
 only ones you will be able to obtain an official SHA-1 for (from sites [such as this one](https://msdn.rg-adguard.net/public.php))
-for instance) allowing you to be 100% certain that the image you are using is non corrupted and safe to use.
+allowing you to be 100% certain that the image you are using is non corrupted and safe to use.
 
 This, in turn, offers assurance that the content __YOU__ are using to install your OS, and which it is indeed critical
 to validate beforehand if you care about security, does matches bit for bit the one that Microsoft officially released.

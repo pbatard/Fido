@@ -1,5 +1,5 @@
 ﻿#
-# Fido v1.07 - Retail Windows ISO Downloader
+# Fido v1.08 - Retail Windows ISO Downloader
 # Copyright © 2019 Pete Batard <pete@akeo.ie>
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
 #
@@ -517,7 +517,6 @@ $Continue.add_click({
 			$array = @()
 			foreach ($Version in $WindowsVersions[$WindowsVersion.SelectedValue.Index]) {
 				if (($i -ne 0) -and ($Version -is [array])) {
-					Write-Host $Version[0]
 					$array += @(New-Object PsObject -Property @{ Release = $ltrm + $Version[0].Replace(")", ")" + $ltrm); Index = $i })
 				}
 				$i++
