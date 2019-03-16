@@ -1,5 +1,5 @@
 ﻿#
-# Fido v1.06 - Retail Windows ISO Downloader
+# Fido v1.07 - Retail Windows ISO Downloader
 # Copyright © 2019 Pete Batard <pete@akeo.ie>
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
 #
@@ -332,12 +332,12 @@ function ConvertTo-ImageSource
 # Translate a message string
 function Get-Translation([string]$Text)
 {
-	if (-not $English.Contains($Text)) {
+	if (-not $English -contains $Text) {
 		Write-Host "Error: '$Text' is not a translatable string"
 		return "(Untranslated)"
 	}
 	if ($Localized) {
-		if ($Localized.Length -ne  $English.Length) {
+		if ($Localized.Length -ne $English.Length) {
 			Write-Host "Error: '$Text' is not a translatable string"
 		}
 		for ($i = 0; $i -lt $English.Length; $i++) {
@@ -407,6 +407,7 @@ function Get-RandomDate()
 $ErrorActionPreference = "Stop"
 $dh = 58;
 $Stage = 0
+$ltrm = "‎"
 $MaxStage = 4
 $SessionId = [guid]::NewGuid()
 $ExitCode = 100
@@ -516,7 +517,8 @@ $Continue.add_click({
 			$array = @()
 			foreach ($Version in $WindowsVersions[$WindowsVersion.SelectedValue.Index]) {
 				if (($i -ne 0) -and ($Version -is [array])) {
-					$array += @(New-Object PsObject -Property @{ Release = $Version[0]; Index = $i })
+					Write-Host $Version[0]
+					$array += @(New-Object PsObject -Property @{ Release = $ltrm + $Version[0].Replace(")", ")" + $ltrm); Index = $i })
 				}
 				$i++
 			}
@@ -609,6 +611,7 @@ $Continue.add_click({
 			$SelectedIndex = 0
 			$array = @()
 			try {
+				$Is64 = [Environment]::Is64BitOperatingSystem
 				$r = Invoke-WebRequest -UserAgent $UserAgent -WebSession $Session $url
 				if (-not $($r.AllElements | ? {$_.id -eq "expiration-time"})) {
 					$ErrorMessage = $(GetElementById -Request $r -Id "errorModalMessage").innerText
@@ -632,12 +635,12 @@ $Continue.add_click({
 						$Type = $json.DownloadType
 						if ($Type -eq "IsoX64") {
 							$Type = "x64"
-							if ($env:PROCESSOR_ARCHITECTURE -eq "AMD64") {
+							if ($Is64) {
 								$SelectedIndex = $i
 							}
 						} elseif ($Type -eq "IsoX86") {
 							$Type = "x86"
-							if ($env:PROCESSOR_ARCHITECTURE -eq "X86") {
+							if (-not $Is64) {
 								$SelectedIndex = $i
 							}
 						}
