@@ -1,5 +1,5 @@
 ﻿#
-# Fido v1.08 - Retail Windows ISO Downloader
+# Fido v1.09 - Retail Windows ISO Downloader
 # Copyright © 2019 Pete Batard <pete@akeo.ie>
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
 #
@@ -438,14 +438,7 @@ if ($LocData -and (-not $LocData.StartsWith("en-US"))) {
 	}
 	$Locale = $Localized[0]
 }
-# Test if the Microsoft servers can handle our locale. If not, fall back to en-US.
 $QueryLocale = $Locale
-try {
-	$url = "https://www.microsoft.com/" + $QueryLocale + "/software-download/"
-	Invoke-WebRequest -UseBasicParsing -MaximumRedirection 0 -UserAgent $UserAgent $url | Out-Null
-} catch {
-	$QueryLocale = "en-US"
-}
 
 # Make sure PowerShell 3.0 or later is used (for Invoke-WebRequest)
 if ($PSVersionTable.PSVersion.Major -lt 3) {
@@ -513,6 +506,16 @@ $Continue.add_click({
 	switch ($Stage) {
 
 		1 { # Windows Version selection
+			$XMLForm.Title = Get-Translation($English[12])
+			Refresh-Control($XMLForm)
+			# Check if the locale we want is available - Fall back to en-US otherwise
+			try {
+				$url = "https://www.microsoft.com/" + $QueryLocale + "/software-download/"
+				Invoke-WebRequest -UseBasicParsing -MaximumRedirection 0 -UserAgent $UserAgent $url | Out-Null
+			} catch {
+				$script:QueryLocale = "en-US"
+			}
+
 			$i = 0
 			$array = @()
 			foreach ($Version in $WindowsVersions[$WindowsVersion.SelectedValue.Index]) {
@@ -524,6 +527,7 @@ $Continue.add_click({
 
 			$script:WindowsRelease = Add-Entry $Stage "Release" $array
 			$Back.Content = Get-Translation($English[8])
+			$XMLForm.Title = $AppTitle
 		}
 
 		2 { # Windows Release selection => Populate Product Edition
