@@ -63,3 +63,13 @@ make sure that you manually launch IE at least once and complete the setup.
 Note that, if running this script elevated, this annoyance can be avoided by using the `-DisableFirstRunCustomize`
 option (which basically __temporarily__ creates the key of the same name in the registry __if__ it doesn't already
 exist, to bypass that behaviour).
+
+Additional Notes
+----------------
+
+Because of it's intended usage with Rufus, this script is not designed to cover all possible retail ISO downloads, but
+mostly those that the general public are likely to use. For instance, we currently have no plan to add support for
+LTSB/LTSC Windows 10 ISOs downloads.
+
+If you are interested in such downloads, you are kindly invited to visit the relevant download pages from Microsoft
+such as [this one](https://www.microsoft.com/evalcenter/evaluate-windows-10-enterprise) for LTSC versions.

@@ -1,5 +1,5 @@
 ﻿#
-# Fido v1.09 - Retail Windows ISO Downloader
+# Fido v1.10 - Retail Windows ISO Downloader
 # Copyright © 2019 Pete Batard <pete@akeo.ie>
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
 #
@@ -40,6 +40,9 @@ param(
 )
 #endregion
 
+try {
+	[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+} catch {}
 Write-Host Please Wait...
 
 #region Assembly Types
@@ -88,88 +91,84 @@ $WindowsVersions = @(
 			"1803 (Build 17134.1 - 2018.04)",
 			@("Windows 10 Home/Pro", 651),
 			@("Windows 10 Education", 655),
-			@("Windows 10 Enterprise Eval", -629)
-			@("Windows 10 COEM 1803 Home China", -640),
-			@("Windows 10 COEM 1803", -639),
-			@("Windows 10 1803 Home China", -638),
 			@("Windows 10 1803", 637),
-			@("Windows 10 COEM 1803_1 Home China", -654),
-			@("Windows 10 COEM 1803_1", -653),
-			@("Windows 10 1803_1 Home China", -652)
+			@("Windows 10 Home China", -652),
+			@("Windows 10 COEM", -653),
+			@("Windows 10 COEM Home China", -654)
 		),
 		@(
 			"1709 (Build 16299.15 - 2017.09)",
-			@("Windows 10 Education 1709", 488),
-			@("Windows 10 COEM 1709 Home China", -487),
-			@("Windows 10 COEM 1709", -486),
-			@("Windows 10 1709 Home China", -485),
-			@("Windows 10 1709", 484)
+			@("Windows 10 Home/Pro", 484),
+			@("Windows 10 Education", 488),
+			@("Windows 10 Home China", -485),
+			@("Windows 10 COEM", -486),
+			@("Windows 10 COEM Home China", -487)
 		),
 		@(
-			"1703 (Build 15063.0 - 2017.03)",
-			@("Windows 10 1703 Education N", 424),
-			@("Windows 10 1703 Education", 423),
-			@("Windows 10 COEM 1703 Home China", -372),
-			@("Windows 10 COEM 1703 Single Language", 371),
-			@("Windows 10 COEM 1703 N", 370),
-			@("Windows 10 COEM 1703", 369),
-			@("Windows 10 1703 Home China (Redstone 2)", -364),
-			@("Windows 10 1703 Single Language (Redstone 2)", -363),
-			@("Windows 10 1703 N (Redstone 2)", 362),
-			@("Windows 10 1703 (Redstone 2)", 361)
+			"1703 [Redstone 2] (Build 15063.0 - 2017.03)",
+			@("Windows 10 Home/Pro", 361),
+			@("Windows 10 Home/Pro N", 362),
+			@("Windows 10 Single Language", 363),
+			@("Windows 10 Education", 423),
+			@("Windows 10 Education N", 424),
+			@("Windows 10 Home China", -364),
+			@("Windows 10 COEM", -369),
+			@("Windows 10 COEM N", -370),
+			@("Windows 10 COEM Home China", -372),
+			@("Windows 10 COEM Single Language", 371)
 		),
 		@(
-			"1607 (Build 14393.0 - 2017.07)",
-			@("Windows 10 China Get Genuine (Redstone 1)", -247),
-			@("Windows 10 Single Language (Redstone 1)", 246),
-			@("Windows 10 N (Redstone 1)", 245),
-			@("Windows 10 (Redstone 1)", 244),
-			@("Windows 10 Education N (Redstone 1)", 243),
-			@("Windows 10 Education (Redstone 1)", 242)
+			"1607 [Redstone 1] (Build 14393.0 - 2017.07)",
+			@("Windows 10 Home/Pro", 244),
+			@("Windows 10 Home/Pro N", 245),
+			@("Windows 10 Single Language", 246),
+			@("Windows 10 Education", 242),
+			@("Windows 10 Education N", 243),
+			@("Windows 10 China Get Genuine", -247)
 		),
 		@(
-			"1511 R3 (Build 10586.164 - 2016.04)",
-			@("Windows 10 China Get Genuine (Threshold 2, April 2016 Update)", -185),
-			@("Windows 10 Single Language (Threshold 2, April 2016 Update)", 184),
-			@("Windows 10 N (Threshold 2, April 2016 Update)", -183),
-			@("Windows 10 KN (Threshold 2, April 2016 Update)", -182),
-			@("Windows 10 Education N (Threshold 2, April 2016 Update)", 181),
-			@("Windows 10 Education KN (Threshold 2, April 2016 Update)", -180),
-			@("Windows 10 Education (Threshold 2, April 2016 Update)", 179),
-			@("Windows 10 (Threshold 2, April 2016 Update)", 178)
+			"1511 R3 [Threshold 2] (Build 10586.164 - 2016.04)",
+			@("Windows 10 Home/Pro", 178),
+			@("Windows 10 Home/Pro N", 183),
+			@("Windows 10 Single Language", 184),
+			@("Windows 10 Education", 179),
+			@("Windows 10 Education N", 181),
+			@("Windows 10 KN", -182),
+			@("Windows 10 Education KN", -180),
+			@("Windows 10 China Get Genuine", -185)
 		),
 		@(
-			"1511 R2 (Build 10586.104 - 2016.02)",
-			@("Windows 10 Single Language (Threshold 2, February 2016 Update)", 116),
-			@("Windows 10 N (Threshold 2, February 2016 Update)", 115),
-			@("Windows 10 KN (Threshold 2, February 2016 Update)", -114),
-			@("Windows 10 China Get Genuine (Threshold 2, February 2016 Update)", -113),
-			@("Windows 10 Education N (Threshold 2, February 2016 Update)", 112),
-			@("Windows 10 Education KN (Threshold 2, February 2016 Update)", -111),
-			@("Windows 10 Education (Threshold 2, February 2016 Update)", 110),
-			@("Windows 10 (Threshold 2, February 2016 Update)", 109)
+			"1511 R2 [Threshold 2] (Build 10586.104 - 2016.02)",
+			@("Windows 10 Home/Pro", 109),
+			@("Windows 10 Home/Pro N", 115),
+			@("Windows 10 Single Language", 116),
+			@("Windows 10 Education", 110),
+			@("Windows 10 Education N", 112),
+			@("Windows 10 KN", -114),
+			@("Windows 10 Education KN", -111),
+			@("Windows 10 China Get Genuine", -113)
 		),
 		@(
-			"1511 R1 (Build 10586.0 - 2015.11)",
-			@("Windows 10 Single Language (Threshold 2)", 106),
-			@("Windows 10 N (Threshold 2)", 105),
-			@("Windows 10 KN (Threshold 2)", -104),
-			@("Windows 10 China Get Genuine (Threshold 2)", -103),
-			@("Windows 10 Education N (Threshold 2)", 102),
-			@("Windows 10 Education KN (Threshold 2)", -101),
-			@("Windows 10 Education (Threshold 2)", 100),
-			@("Windows 10 (Threshold 2)", 99)
+			"1511 R1 [Threshold 2] (Build 10586.0 - 2015.11)",
+			@("Windows 10 Home/Pro", 99),
+			@("Windows 10 Home/Pro N", 105),
+			@("Windows 10 Single Language", 106),
+			@("Windows 10 Education", 100),
+			@("Windows 10 Education N", 102),
+			@("Windows 10 KN", -104),
+			@("Windows 10 Education KN", -101),
+			@("Windows 10 China Get Genuine", -103)
 		),
 		@(
-			"1507 (Build 10240.16384 - 2015.07)",
-			@("Windows 10 Single Language (Threshold 1)", 82),
-			@("Windows 10 N (Threshold 1)", 81),
-			@("Windows 10 KN (Threshold 1)", -80),
-			@("Windows 10 (Threshold 1)", 79),
-			@("Windows 10 China Get Genuine (Threshold 1)", -78),
-			@("Windows 10 Education N (Threshold 1)", 77),
-			@("Windows 10 Education KN (Threshold 1)", -76),
-			@("Windows 10 Education (Threshold 1)", 75)
+			"1507 [Threshold 1] (Build 10240.16384 - 2015.07)",
+			@("Windows 10 Home/Pro", 79),
+			@("Windows 10 Home/Pro N", 81),
+			@("Windows 10 Single Language", 82),
+			@("Windows 10 Education", 75)
+			@("Windows 10 Education N", 77),
+			@("Windows 10 KN", -80),
+			@("Windows 10 Education KN", -76),
+			@("Windows 10 China Get Genuine", -78)
 		)
 	),
 	@(
@@ -179,12 +178,12 @@ $WindowsVersions = @(
 			@("Windows 8.1", 52),
 			@("Windows 8.1 N", 55)
 			@("Windows 8.1 Single Language", 48),
-			@("Windows 8.1 Professional LE N", 71),
-			@("Windows 8.1 Professional LE KN", -70),
-			@("Windows 8.1 Professional LE K", -69),
 			@("Windows 8.1 Professional LE", 68),
-			@("Windows 8.1 KN", -62),
+			@("Windows 8.1 Professional LE N", 71),
+			@("Windows 8.1 Professional LE K", -69),
+			@("Windows 8.1 Professional LE KN", -70),
 			@("Windows 8.1 K", -61)
+			@("Windows 8.1 KN", -62)
 		)
 	)
 )
@@ -628,26 +627,17 @@ $Continue.add_click({
 				$html = $html.Replace("class=product-download-hidden", "")
 				$html = $html.Replace("type=hidden", "")
 				$html = $html.Replace(">", "/>")
-				$html = $html.Replace(": I", ": ""I")
-				$html = $html.Replace(" }", """ }")
+				$html = $html.Replace("IsoX86", """x86""")
+				$html = $html.Replace("IsoX64", """x64""")
 				$html = "<inputs>" + $html + "</inputs>"
 				$xml = [xml]$html
 				foreach ($var in $xml.inputs.input) {
 					$json = $var.value | ConvertFrom-Json;
 					if ($json) {
-						$Type = $json.DownloadType
-						if ($Type -eq "IsoX64") {
-							$Type = "x64"
-							if ($Is64) {
-								$SelectedIndex = $i
-							}
-						} elseif ($Type -eq "IsoX86") {
-							$Type = "x86"
-							if (-not $Is64) {
-								$SelectedIndex = $i
-							}
+						if (($Is64 -and $json.DownloadType -eq "x64") -or (-not $Is64 -and $json.DownloadType -eq "x86")) {
+							$SelectedIndex = $i
 						}
-						$array += @(New-Object PsObject -Property @{ Type = $Type; Link = $json.Uri })
+						$array += @(New-Object PsObject -Property @{ Type = $json.DownloadType; Link = $json.Uri })
 						$i++
 					}
 				}
