@@ -1,5 +1,5 @@
 ﻿#
-# Fido v1.10 - Retail Windows ISO Downloader
+# Fido v1.11 - Retail Windows ISO Downloader
 # Copyright © 2019 Pete Batard <pete@akeo.ie>
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
 #
@@ -34,9 +34,7 @@ param(
 	# (Optional) Disable IE First Run Customize so that Invoke-WebRequest
 	# doesn't throw an exception if the user has never launched IE.
 	# Note that this requires the script to run elevated.
-	[switch]$DisableFirstRunCustomize,
-	# (Optional) Toggle expert mode (additional ISOs to choose).
-	[switch]$Expert = $False
+	[switch]$DisableFirstRunCustomize
 )
 #endregion
 
@@ -72,6 +70,8 @@ Add-Type -AssemblyName PresentationFramework
 #endregion
 
 #region Data
+$zh = 0x10000
+$ko = 0x20000
 $WindowsVersions = @(
 	@(
 		@("Windows 10", "Windows10ISO"),
@@ -79,30 +79,26 @@ $WindowsVersions = @(
 			"1809 R2 (Build 17763.107 - 2018.10)",
 			@("Windows 10 Home/Pro", 1060),
 			@("Windows 10 Education", 1056),
-			@("Windows 10 Home China ", -1061)
+			@("Windows 10 Home China ", ($zh + 1061))
 		),
 		@(
 			"1809 R1 (Build 17763.1 - 2018.09)",
 			@("Windows 10 Home/Pro", 1019),
 			@("Windows 10 Education", 1021),
-			@("Windows 10 Home China ", -1020)
+			@("Windows 10 Home China ", ($zh + 1020))
 		),
 		@(
 			"1803 (Build 17134.1 - 2018.04)",
 			@("Windows 10 Home/Pro", 651),
 			@("Windows 10 Education", 655),
 			@("Windows 10 1803", 637),
-			@("Windows 10 Home China", -652),
-			@("Windows 10 COEM", -653),
-			@("Windows 10 COEM Home China", -654)
+			@("Windows 10 Home China", ($zh + 652))
 		),
 		@(
 			"1709 (Build 16299.15 - 2017.09)",
 			@("Windows 10 Home/Pro", 484),
 			@("Windows 10 Education", 488),
-			@("Windows 10 Home China", -485),
-			@("Windows 10 COEM", -486),
-			@("Windows 10 COEM Home China", -487)
+			@("Windows 10 Home China", ($zh + 485))
 		),
 		@(
 			"1703 [Redstone 2] (Build 15063.0 - 2017.03)",
@@ -111,11 +107,7 @@ $WindowsVersions = @(
 			@("Windows 10 Single Language", 363),
 			@("Windows 10 Education", 423),
 			@("Windows 10 Education N", 424),
-			@("Windows 10 Home China", -364),
-			@("Windows 10 COEM", -369),
-			@("Windows 10 COEM N", -370),
-			@("Windows 10 COEM Home China", -372),
-			@("Windows 10 COEM Single Language", 371)
+			@("Windows 10 Home China", ($zh + 364))
 		),
 		@(
 			"1607 [Redstone 1] (Build 14393.0 - 2017.07)",
@@ -124,7 +116,7 @@ $WindowsVersions = @(
 			@("Windows 10 Single Language", 246),
 			@("Windows 10 Education", 242),
 			@("Windows 10 Education N", 243),
-			@("Windows 10 China Get Genuine", -247)
+			@("Windows 10 China Get Genuine", ($zh + 247))
 		),
 		@(
 			"1511 R3 [Threshold 2] (Build 10586.164 - 2016.04)",
@@ -133,9 +125,9 @@ $WindowsVersions = @(
 			@("Windows 10 Single Language", 184),
 			@("Windows 10 Education", 179),
 			@("Windows 10 Education N", 181),
-			@("Windows 10 KN", -182),
-			@("Windows 10 Education KN", -180),
-			@("Windows 10 China Get Genuine", -185)
+			@("Windows 10 KN", ($ko + 182)),
+			@("Windows 10 Education KN", ($ko + 180)),
+			@("Windows 10 China Get Genuine", ($zh + 185))
 		),
 		@(
 			"1511 R2 [Threshold 2] (Build 10586.104 - 2016.02)",
@@ -144,9 +136,9 @@ $WindowsVersions = @(
 			@("Windows 10 Single Language", 116),
 			@("Windows 10 Education", 110),
 			@("Windows 10 Education N", 112),
-			@("Windows 10 KN", -114),
-			@("Windows 10 Education KN", -111),
-			@("Windows 10 China Get Genuine", -113)
+			@("Windows 10 KN", ($ko + 114)),
+			@("Windows 10 Education KN", ($ko + 111)),
+			@("Windows 10 China Get Genuine", ($zh + 113))
 		),
 		@(
 			"1511 R1 [Threshold 2] (Build 10586.0 - 2015.11)",
@@ -155,9 +147,9 @@ $WindowsVersions = @(
 			@("Windows 10 Single Language", 106),
 			@("Windows 10 Education", 100),
 			@("Windows 10 Education N", 102),
-			@("Windows 10 KN", -104),
-			@("Windows 10 Education KN", -101),
-			@("Windows 10 China Get Genuine", -103)
+			@("Windows 10 KN", ($ko + 104)),
+			@("Windows 10 Education KN", ($ko + 101)),
+			@("Windows 10 China Get Genuine", ($zh + 103))
 		),
 		@(
 			"1507 [Threshold 1] (Build 10240.16384 - 2015.07)",
@@ -166,9 +158,9 @@ $WindowsVersions = @(
 			@("Windows 10 Single Language", 82),
 			@("Windows 10 Education", 75)
 			@("Windows 10 Education N", 77),
-			@("Windows 10 KN", -80),
-			@("Windows 10 Education KN", -76),
-			@("Windows 10 China Get Genuine", -78)
+			@("Windows 10 KN", ($ko + 80)),
+			@("Windows 10 Education KN", ($ko + 76)),
+			@("Windows 10 China Get Genuine", ($zh + 78))
 		)
 	),
 	@(
@@ -178,12 +170,8 @@ $WindowsVersions = @(
 			@("Windows 8.1", 52),
 			@("Windows 8.1 N", 55)
 			@("Windows 8.1 Single Language", 48),
-			@("Windows 8.1 Professional LE", 68),
-			@("Windows 8.1 Professional LE N", 71),
-			@("Windows 8.1 Professional LE K", -69),
-			@("Windows 8.1 Professional LE KN", -70),
-			@("Windows 8.1 K", -61)
-			@("Windows 8.1 KN", -62)
+			@("Windows 8.1 K", ($ko + 61)),
+			@("Windows 8.1 KN", ($ko + 62))
 		)
 	)
 )
@@ -328,6 +316,17 @@ function ConvertTo-ImageSource
 	}
 }
 
+function Throw-Error([object]$Req, [string]$Alt)
+{
+	$Err = $(GetElementById -Request $r -Id "errorModalMessage").innerText
+	if (-not $Err) {
+		$Err = $Alt
+	} else {
+		$Err = [System.Text.Encoding]::UTF8.GetString([byte[]][char[]]$Err)
+	}
+	throw $Err
+}
+
 # Translate a message string
 function Get-Translation([string]$Text)
 {
@@ -365,7 +364,7 @@ function GetElementById([object]$Request, [string]$Id)
 
 function Error([string]$ErrorMessage)
 {
-	Write-Host $ErrorMessage
+	Write-Host Error: $ErrorMessage
 	$XMLForm.Title = $(Get-Translation("Error")) + ": " + $ErrorMessage
 	Refresh-Control($XMLForm)
 	$Continue.Content = Get-Translation("Close")
@@ -510,6 +509,7 @@ $Continue.add_click({
 			# Check if the locale we want is available - Fall back to en-US otherwise
 			try {
 				$url = "https://www.microsoft.com/" + $QueryLocale + "/software-download/"
+				Write-Host Querying $url
 				Invoke-WebRequest -UseBasicParsing -MaximumRedirection 0 -UserAgent $UserAgent $url | Out-Null
 			} catch {
 				$script:QueryLocale = "en-US"
@@ -534,8 +534,8 @@ $Continue.add_click({
 			foreach ($Release in  $WindowsVersions[$WindowsVersion.SelectedValue.Index][$WindowsRelease.SelectedValue.Index])
 			{
 				if ($Release -is [array]) {
-					if ($Expert -or ($Release[1] -ge 0)) {
-						$array += @(New-Object PsObject -Property @{ Edition = $Release[0]; Id = $Release[1] })
+					if (($Release[1] -lt 0x10000) -or ($Locale.StartsWith("ko") -and ($Release[1] -band $ko)) -or ($Locale.StartsWith("zh") -and ($Release[1] -band $zh))) {
+						$array += @(New-Object PsObject -Property @{ Edition = $Release[0]; Id = $($Release[1] -band 0xFFFF) })
 					}
 				}
 			}
@@ -580,11 +580,7 @@ $Continue.add_click({
 					}
 				}
 				if ($array.Length -eq 0) {
-					$ErrorMessage = $(GetElementById -Request $r -Id "errorModalMessage").innerText
-					if ($ErrorMessage) {
-						Write-Host "$(Get-Translation("Error")): ""$ErrorMessage"""
-					}
-					throw "Could not parse languages"
+					Throw-Error -Req $r -Alt "Could not parse languages"
 				}
 			} catch {
 				Error($_.Exception.Message)
@@ -616,11 +612,7 @@ $Continue.add_click({
 				$Is64 = [Environment]::Is64BitOperatingSystem
 				$r = Invoke-WebRequest -UserAgent $UserAgent -WebSession $Session $url
 				if (-not $($r.AllElements | ? {$_.id -eq "expiration-time"})) {
-					$ErrorMessage = $(GetElementById -Request $r -Id "errorModalMessage").innerText
-					if ($ErrorMessage) {
-						Write-Host "$(Get-Translation("Error")): ""$ErrorMessage"""
-					}
-					throw  Get-Translation($English[14])
+					Throw-Error -Req $r -Alt Get-Translation($English[14])
 				}
 				$html = $($r.AllElements | ? {$_.tagname -eq "input"}).outerHTML
 				# Need to fix the HTML and JSON data so that it is well-formed
@@ -642,11 +634,7 @@ $Continue.add_click({
 					}
 				}
 				if ($array.Length -eq 0) {
-					$ErrorMessage = $(GetElementById -Request $r -Id "errorModalMessage").innerText
-					if ($ErrorMessage) {
-						Write-Host "$(Get-Translation("Error")): ""$ErrorMessage"""
-					}
-					throw "Could not retreive ISO download links"
+					Throw-Error -Req $r -Alt "Could not retreive ISO download links"
 				}
 			} catch {
 				Error($_.Exception.Message)
