@@ -1,5 +1,5 @@
 #!/bin/bash
-# This script creates the RSA-2048 signatures for our downloadable content
+# Creates an LZMA compressed Fido.ps1 (including decompressed size) and sign it
 
 PRIVATE_KEY=/d/Secured/Akeo/Rufus/private.pem
 PUBLIC_KEY=/d/Secured/Akeo/Rufus/public.pem
@@ -25,6 +25,10 @@ echo
 # Confirm that the pass phrase is valid by trying to sign a dummy file
 openssl dgst -sha256 -sign $PRIVATE_KEY -passin pass:$PASSWORD $PUBLIC_KEY >/dev/null 2>&1 || { echo Invalid pass phrase; exit 1; }
 
-find . -maxdepth 1 -name "*.ps1" | while read FILE; do sign_file; done
+lzma -kf Fido.ps1
+# The 'lzma' utility does not add the uncompressed size, so we must add it manually. And yes, this whole
+# gymkhana is what one must actually go through to insert a 64-bit little endian size into a binary file...
+printf "00: %016X" `stat -c "%s" Fido.ps1` | xxd -r | xxd -p -c1 | tac | xxd -p -r | dd of=Fido.ps1.lzma seek=5 bs=1 status=none conv=notrunc
+find . -maxdepth 1 -name "Fido.ps1.lzma" | while read FILE; do sign_file; done
 # Clear the PASSWORD variable just in case
 PASSWORD=`head -c 50 /dev/random | base64`
