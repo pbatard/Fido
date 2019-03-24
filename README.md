@@ -36,7 +36,7 @@ License
 How it works
 ------------
 
-The script basically performs the same operation as one might perform when visiting either of the following ULRs (that
+The script basically performs the same operation as one might perform when visiting either of the following URLs (that
 is, provided that you have also changed your `User-Agent` browser string, since, when they detect that you are using a
 version of Windows that is the same as the one you are trying to download, the Microsoft web servers at these addresses
 redirect you __away__ from the pages that allow you to download retail ISOs):
