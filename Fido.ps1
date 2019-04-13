@@ -110,7 +110,7 @@ $WindowsVersions = @(
 			@("Windows 10 Home China", ($zh + 364))
 		),
 		@(
-			"1607 [Redstone 1] (Build 14393.0 - 2017.07)",
+			"1607 [Redstone 1] (Build 14393.0 - 2016.07)",
 			@("Windows 10 Home/Pro", 244),
 			@("Windows 10 Home/Pro N", 245),
 			@("Windows 10 Single Language", 246),
