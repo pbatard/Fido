@@ -1,5 +1,5 @@
 ﻿#
-# Fido v1.14 - Retail Windows ISO Downloader
+# Fido v1.15 - Retail Windows ISO Downloader
 # Copyright © 2019 Pete Batard <pete@akeo.ie>
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
 #
@@ -637,6 +637,7 @@ $Continue.add_click({
 				$html = $html.Replace("class=product-download-hidden", "")
 				$html = $html.Replace("type=hidden", "")
 				$html = $html.Replace(">", "/>")
+				$html = $html.Replace("&nbsp;", " ")
 				$html = $html.Replace("IsoX86", """x86""")
 				$html = $html.Replace("IsoX64", """x64""")
 				$html = "<inputs>" + $html + "</inputs>"
@@ -652,7 +653,7 @@ $Continue.add_click({
 					}
 				}
 				if ($array.Length -eq 0) {
-					Throw-Error -Req $r -Alt "Could not retreive ISO download links"
+					Throw-Error -Req $r -Alt "Could not retrieve ISO download links"
 				}
 			} catch {
 				Error($_.Exception.Message)
