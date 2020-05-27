@@ -1,6 +1,6 @@
 ﻿#
-# Fido v1.15 - Retail Windows ISO Downloader
-# Copyright © 2019 Pete Batard <pete@akeo.ie>
+# Fido v1.16 - Retail Windows ISO Downloader
+# Copyright © 2019-2020 Pete Batard <pete@akeo.ie>
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
 #
 # This program is free software: you can redistribute it and/or modify
@@ -75,6 +75,12 @@ $ko = 0x20000
 $WindowsVersions = @(
 	@(
 		@("Windows 10", "Windows10ISO"),
+		@(
+			"20H1 (Build 19041.264 - 2020.05)",
+			@("Windows 10 Home/Pro", 1626),
+			@("Windows 10 Education", 1625),
+			@("Windows 10 Home China ", ($zh + 1627))
+		),
 		@(
 			"19H2 (Build 18363.418 - 2019.11)",
 			@("Windows 10 Home/Pro", 1429),
@@ -210,10 +216,10 @@ function Select-Language([string]$LangName)
 		($SysLocale.StartsWith("da") -and $LangName -like "*Danish*") -or `
 		($SysLocale.StartsWith("nl") -and $LangName -like "*Dutch*") -or `
 		($SysLocale -eq "en-US" -and $LangName -eq "English") -or `
-		($SysLocale.StartsWith("en") -and $LangName -like "*English*" -and $LangName -like "*inter*") -or `
+		($SysLocale.StartsWith("en") -and $LangName -like "*English*" -and ($LangName -like "*inter*" -or $LangName -like "*ingdom*")) -or `
 		($SysLocale.StartsWith("et") -and $LangName -like "*Eston*") -or `
 		($SysLocale.StartsWith("fi") -and $LangName -like "*Finn*") -or `
-		($SysLocale -eq "fr-CA"  -and $LangName -like "*French*" -and $LangName -like "*Canad*") -or `
+		($SysLocale -eq "fr-CA" -and $LangName -like "*French*" -and $LangName -like "*Canad*") -or `
 		($SysLocale.StartsWith("fr") -and $LangName -eq "French") -or `
 		($SysLocale.StartsWith("de") -and $LangName -like "*German*") -or `
 		($SysLocale.StartsWith("el") -and $LangName -like "*Greek*") -or `
@@ -385,12 +391,9 @@ function Error([string]$ErrorMessage)
 	Write-Host Error: $ErrorMessage
 	$XMLForm.Title = $(Get-Translation("Error")) + ": " + $ErrorMessage
 	Refresh-Control($XMLForm)
-	$Continue.Content = Get-Translation("Close")
-	Refresh-Control($Continue)
+	$XMLGrid.Children[2 * $script:Stage + 1].IsEnabled = $True
 	$UserInput = [System.Windows.MessageBox]::Show($XMLForm.Title,  $(Get-Translation("Error")), "OK", "Error")
-	$script:ExitCode = $Stage
-	$script:Stage = -1
-	$Continue.IsEnabled = $True
+	$script:ExitCode = $script:Stage--
 }
 
 function Get-RandomDate()
@@ -508,11 +511,7 @@ $WindowsVersion.DisplayMemberPath = "Version"
 
 # Button Action
 $Continue.add_click({
-	if ($script:Stage++ -lt 0) {
-		Get-Process -Id $pid | Foreach-Object { $_.CloseMainWindow() | Out-Null }
-		return
-	}
-
+	$script:Stage++
 	$XMLGrid.Children[2 * $Stage + 1].IsEnabled = $False
 	$Continue.IsEnabled = $False
 	$Back.IsEnabled = $False
@@ -602,7 +601,7 @@ $Continue.add_click({
 				}
 			} catch {
 				Error($_.Exception.Message)
-				return
+				break
 			}
 			$script:Language = Add-Entry $Stage "Language" $array "DisplayLanguage"
 			$Language.SelectedIndex = $SelectedIndex
@@ -657,7 +656,7 @@ $Continue.add_click({
 				}
 			} catch {
 				Error($_.Exception.Message)
-				return
+				break
 			}
 
 			$script:Arch = Add-Entry $Stage "Architecture" $array "Type"
@@ -694,7 +693,7 @@ $Continue.add_click({
 	}
 	$Continue.IsEnabled = $True
 	if ($Stage -ge 0) {
-		$Back.IsEnabled = $True;
+		$Back.IsEnabled = $True
 	}
 })
 
@@ -718,10 +717,12 @@ $Back.add_click({
 		$Margin.Top -= $dh2
 		$Back.Margin = $Margin
 		$script:Stage = $Stage - 1
+		$XMLForm.Title = $AppTitle
 		if ($Stage -eq 0) {
 			$Back.Content = Get-Translation("Close")
-		} elseif ($Stage -eq 3) {
+		} else {
 			$Continue.Content = Get-Translation("Continue")
+			Refresh-Control($Continue)
 		}
 	}
 })
