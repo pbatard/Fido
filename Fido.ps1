@@ -63,7 +63,11 @@ $code = @"
 	}
 "@
 
-Add-Type -MemberDefinition $code -Namespace Gui -UsingNamespace "System.IO", "System.Text", "System.Drawing", "System.Globalization" -ReferencedAssemblies System.Drawing -Name Utils -ErrorAction Stop
+if ($host.version -ge "7.0") {
+  Add-Type -MemberDefinition $code -Namespace Gui -UsingNamespace System.Runtime, System.IO, System.Text, System.Drawing, System.Globalization -ReferencedAssemblies System.Drawing.Common -Name Utils -ErrorAction Stop
+} else {
+  Add-Type -MemberDefinition $code -Namespace Gui -UsingNamespace System.IO, System.Text, System.Drawing, System.Globalization -ReferencedAssemblies System.Drawing -Name Utils -ErrorAction Stop
+}
 Add-Type -AssemblyName PresentationFramework
 # Hide the powershell window: https://stackoverflow.com/a/27992426/1069307
 [Gui.Utils]::ShowWindow(([System.Diagnostics.Process]::GetCurrentProcess() | Get-Process).MainWindowHandle, 0) | Out-Null
@@ -582,10 +586,14 @@ $Continue.add_click({
 			$i = 0
 			$SelectedIndex = 0
 			try {
-				$r = Invoke-WebRequest -UserAgent $UserAgent -WebSession $Session $url
+				$r = Invoke-WebRequest -UserAgent $UserAgent -SessionVariable "Session" $url
 				# Go through an XML conversion to keep all PowerShells happy...
 				if (-not $($r.AllElements | ? {$_.id -eq "product-languages"})) {
-					throw "Unexpected server response"
+					if ($host.version -ge "7.0") {
+						throw "This PowerShell version can not parse HTML"
+					} else {
+						throw "Unexpected server response"
+					}
 				}
 				$html = $($r.AllElements | ? {$_.id -eq "product-languages"}).InnerHTML
 				$html = $html.Replace("selected value", "value")
