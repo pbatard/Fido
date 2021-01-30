@@ -1,6 +1,6 @@
 ﻿#
-# Fido v1.17 - Retail Windows ISO Downloader
-# Copyright © 2019-2020 Pete Batard <pete@akeo.ie>
+# Fido v1.18 - Retail Windows ISO Downloader
+# Copyright © 2019-2021 Pete Batard <pete@akeo.ie>
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
 #
 # This program is free software: you can redistribute it and/or modify
