@@ -64,7 +64,7 @@ $code = @"
 "@
 
 if ($host.version -ge "7.0") {
-  Add-Type -MemberDefinition $code -Namespace Gui -UsingNamespace System.Runtime, System.IO, System.Text, System.Drawing, System.Globalization -ReferencedAssemblies System.Drawing.Common -Name Utils -ErrorAction Stop
+  Add-Type -WarningAction Ignore -IgnoreWarnings -MemberDefinition $code -Namespace Gui -UsingNamespace System.Runtime, System.IO, System.Text, System.Drawing, System.Globalization -ReferencedAssemblies System.Drawing.Common -Name Utils -ErrorAction Stop
 } else {
   Add-Type -MemberDefinition $code -Namespace Gui -UsingNamespace System.IO, System.Text, System.Drawing, System.Globalization -ReferencedAssemblies System.Drawing -Name Utils -ErrorAction Stop
 }
@@ -592,18 +592,11 @@ $Continue.add_click({
 			$i = 0
 			$SelectedIndex = 0
 			try {
-				$r = Invoke-WebRequest -UserAgent $UserAgent -SessionVariable "Session" $url
+				$r = Invoke-WebRequest -UseBasicParsing -UserAgent $UserAgent -SessionVariable "Session" $url
+				$pattern = '(?s)<select id="product-languages">(.*)?</select>'
+				$html = [regex]::Match($r, $pattern).Groups[1].Value
 				# Go through an XML conversion to keep all PowerShells happy...
-				if (-not $($r.AllElements | ? {$_.id -eq "product-languages"})) {
-					if ($host.version -ge "7.0") {
-						throw "This PowerShell version can not parse HTML"
-					} else {
-						throw "Unexpected server response"
-					}
-				}
-				$html = $($r.AllElements | ? {$_.id -eq "product-languages"}).InnerHTML
 				$html = $html.Replace("selected value", "value")
-				$html = $html.Replace("&", "&amp;")
 				$html = "<options>" + $html + "</options>"
 				$xml = [xml]$html
 				foreach ($var in $xml.options.option) {
@@ -647,18 +640,15 @@ $Continue.add_click({
 			$array = @()
 			try {
 				$Is64 = [Environment]::Is64BitOperatingSystem
-				$r = Invoke-WebRequest -UserAgent $UserAgent -WebSession $Session $url
-				if (-not $($r.AllElements | ? {$_.id -eq "expiration-time"})) {
-					Throw-Error -Req $r -Alt Get-Translation($English[14])
-				}
-				$html = $($r.AllElements | ? {$_.tagname -eq "input"}).outerHTML
+				$r = Invoke-WebRequest -UseBasicParsing -UserAgent $UserAgent -WebSession $Session $url
+				$pattern = '(?s)(<input.*?/>)'
+				ForEach-Object { [regex]::Matches($r, $pattern) } | ForEach-Object { $html += $_.Groups[1].value }
 				# Need to fix the HTML and JSON data so that it is well-formed
 				$html = $html.Replace("class=product-download-hidden", "")
 				$html = $html.Replace("type=hidden", "")
-				$html = $html.Replace(">", "/>")
 				$html = $html.Replace("&nbsp;", " ")
-				$html = $html.Replace("IsoX86", """x86""")
-				$html = $html.Replace("IsoX64", """x64""")
+				$html = $html.Replace("IsoX86", "&quot;x86&quot;")
+				$html = $html.Replace("IsoX64", "&quot;x64&quot;")
 				$html = "<inputs>" + $html + "</inputs>"
 				$xml = [xml]$html
 				foreach ($var in $xml.inputs.input) {
