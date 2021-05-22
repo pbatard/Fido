@@ -1,5 +1,5 @@
 ﻿#
-# Fido v1.18 - Retail Windows ISO Downloader
+# Fido v1.19 - Retail Windows ISO Downloader
 # Copyright © 2019-2021 Pete Batard <pete@akeo.ie>
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
 #
@@ -30,11 +30,7 @@ param(
 	[string]$Icon,
 	# (Optional) Name of a pipe the download URL should be sent to.
 	# If not provided, a browser window is opened instead.
-	[string]$PipeName,
-	# (Optional) Disable IE First Run Customize so that Invoke-WebRequest
-	# doesn't throw an exception if the user has never launched IE.
-	# Note that this requires the script to run elevated.
-	[switch]$DisableFirstRunCustomize
+	[string]$PipeName
 )
 #endregion
 
@@ -447,14 +443,11 @@ $MaxStage = 4
 $SessionId = [guid]::NewGuid()
 $ExitCode = 100
 $Locale = "en-US"
-$DFRCKey = "HKLM:\Software\Policies\Microsoft\Internet Explorer\Main\"
-$DFRCName = "DisableFirstRunCustomize"
-$DFRCAdded = $False
 $RequestData = @{}
 $RequestData["GetLangs"] = @("a8f8f489-4c7f-463a-9ca6-5cff94d8d041", "getskuinformationbyproductedition" )
 $RequestData["GetLinks"] = @("cfa9e580-a81e-4a4b-a846-7b21bf4e2e5b", "GetProductDownloadLinksBySku" )
 # Create a semi-random Linux User-Agent string
-$FirefoxVersion = Get-Random -Minimum 30 -Maximum 60
+$FirefoxVersion = Get-Random -Minimum 50 -Maximum 90
 $FirefoxDate = Get-RandomDate
 $UserAgent = "Mozilla/5.0 (X11; Linux i586; rv:$FirefoxVersion.0) Gecko/$FirefoxDate Firefox/$FirefoxVersion.0"
 #endregion
@@ -483,20 +476,6 @@ if ($PSVersionTable.PSVersion.Major -lt 3) {
 		Start-Process -FilePath https://www.microsoft.com/download/details.aspx?id=34595
 	}
 	exit 102
-}
-
-# If asked, disable IE's first run customize prompt as it interferes with Invoke-WebRequest
-if ($DisableFirstRunCustomize) {
-	try {
-		# Only create the key if it doesn't already exist
-		Get-ItemProperty -Path $DFRCKey -Name $DFRCName
-	} catch {
-		if (-not (Test-Path $DFRCKey)) {
-			New-Item -Path $DFRCKey -Force | Out-Null
-		}
-		Set-ItemProperty -Path $DFRCKey -Name $DFRCName -Value 1
-		$DFRCAdded = $True
-	}
 }
 
 # Form creation
@@ -742,7 +721,4 @@ $XMLForm.Add_Loaded( { $XMLForm.Activate() } )
 $XMLForm.ShowDialog() | Out-Null
 
 # Clean up & exit
-if ($DFRCAdded) {
-	Remove-ItemProperty -Path $DFRCKey -Name $DFRCName
-}
 exit $ExitCode

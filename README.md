@@ -58,17 +58,12 @@ for all the architectures available for that specific combination of version + l
 Requirements
 ------------
 
-PowerShell 3.0 or later is required. However the script will detect if you are using an older version and point you to
+PowerShell 3.0 or later is required. However the script should detect if you are using an older version and point you to
 the relevant PowerShell 3.0 download page if needed (which should only ever occur if you are running a vanilla version
 of Windows 7).
 
-Also, because Internet Explorer is being invoked behind the scenes, if you haven't gone through the first time setup for
-Internet Explorer, you may receive an error about this when running the script. If that is the case, then you should
-make sure that you manually launch IE at least once and complete the setup.
-
-Note however that, if you are running the script elevated, you can work around the above annoyance by using the
-`-DisableFirstRunCustomize` option which basically __temporarily__ creates a key of the same name in the registry __if__
-it doesn't already exist, to bypass the first time setup error.
+Note that the current version of the script does not need Internet Explorer to be installed and should also work with
+PowerShell 7.
 
 Additional Notes
 ----------------
