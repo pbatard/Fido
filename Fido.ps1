@@ -30,7 +30,15 @@ param(
 	[string]$Icon,
 	# (Optional) Name of a pipe the download URL should be sent to.
 	# If not provided, a browser window is opened instead.
-	[string]$PipeName
+	[string]$PipeName,
+	# Headless
+	[switch]$Headless = $False,
+	[string]$cliVersionName,
+	[string]$cliReleaseName,
+	[string]$cliEditionName,
+	[string]$cliLanguage,
+	[string]$cliArch,
+	[string]$cliFilename = "Windows.iso"
 )
 #endregion
 
@@ -40,6 +48,7 @@ try {
 Write-Host Please Wait...
 
 #region Assembly Types
+
 $code = @"
 [DllImport("shell32.dll", CharSet = CharSet.Auto, SetLastError = true, BestFitMapping = false, ThrowOnUnmappableChar = true)]
 	internal static extern int ExtractIconEx(string sFile, int iIndex, out IntPtr piLargeVersion, out IntPtr piSmallVersion, int amountIcons);
@@ -59,14 +68,19 @@ $code = @"
 	}
 "@
 
-if ($host.version -ge "7.0") {
-  Add-Type -WarningAction Ignore -IgnoreWarnings -MemberDefinition $code -Namespace Gui -UsingNamespace System.Runtime, System.IO, System.Text, System.Drawing, System.Globalization -ReferencedAssemblies System.Drawing.Common -Name Utils -ErrorAction Stop
-} else {
-  Add-Type -MemberDefinition $code -Namespace Gui -UsingNamespace System.IO, System.Text, System.Drawing, System.Globalization -ReferencedAssemblies System.Drawing -Name Utils -ErrorAction Stop
+
+if ( ! $Headless ) {
+
+  if ($host.version -ge "7.0") {
+    Add-Type -WarningAction Ignore -IgnoreWarnings -MemberDefinition $code -Namespace Gui -UsingNamespace System.Runtime, System.IO, System.Text, System.Drawing, System.Globalization -ReferencedAssemblies System.Drawing.Common -Name Utils -ErrorAction Stop
+  } else {
+    Add-Type -MemberDefinition $code -Namespace Gui -UsingNamespace System.IO, System.Text, System.Drawing, System.Globalization -ReferencedAssemblies System.Drawing -Name Utils -ErrorAction Stop
+  }
+
+  Add-Type -AssemblyName PresentationFramework
+  # Hide the powershell window: https://stackoverflow.com/a/27992426/1069307
+  [Gui.Utils]::ShowWindow(([System.Diagnostics.Process]::GetCurrentProcess() | Get-Process).MainWindowHandle, 0) | Out-Null
 }
-Add-Type -AssemblyName PresentationFramework
-# Hide the powershell window: https://stackoverflow.com/a/27992426/1069307
-[Gui.Utils]::ShowWindow(([System.Diagnostics.Process]::GetCurrentProcess() | Get-Process).MainWindowHandle, 0) | Out-Null
 #endregion
 
 #region Data
@@ -496,7 +510,7 @@ $ExitCode = 100
 $Locale = "en-US"
 $RequestData = @{}
 $RequestData["GetLangs"] = @("a8f8f489-4c7f-463a-9ca6-5cff94d8d041", "getskuinformationbyproductedition" )
-$RequestData["GetLinks"] = @("cfa9e580-a81e-4a4b-a846-7b21bf4e2e5b", "GetProductDownloadLinksBySku" )
+$RequestData["GetLinks"] = @("a224afab-2097-4dfa-a2ba-463eb191a285", "GetProductDownloadLinksBySku" )
 # Create a semi-random Linux User-Agent string
 $FirefoxVersion = Get-Random -Minimum 50 -Maximum 90
 $FirefoxDate = Get-RandomDate
@@ -527,6 +541,319 @@ if ($PSVersionTable.PSVersion.Major -lt 3) {
 		Start-Process -FilePath https://www.microsoft.com/download/details.aspx?id=34595
 	}
 	exit 102
+}
+
+function CheckLocale {
+			# Check if the locale we want is available - Fall back to en-US otherwise
+			try {
+				$url = "https://www.microsoft.com/" + $QueryLocale + "/software-download/"
+				Write-Host Querying $url
+				Invoke-WebRequest -UseBasicParsing -MaximumRedirection 0 -UserAgent $UserAgent $url | Out-Null
+			} catch {
+				$script:QueryLocale = "en-US"
+			}
+}
+
+function Stage1 {
+
+param (
+        $SelectedValue
+    )
+			CheckLocale
+
+			$i = 0
+			$array = @()
+			foreach ($Version in $WindowsVersions[$SelectedValue]) {
+				if (($i -ne 0) -and ($Version -is [array])) {
+					$array += @(New-Object PsObject -Property @{ Release = $ltrm + $Version[0].Replace(")", ")" + $ltrm); Index = $i })
+				}
+				$i++
+			}
+			
+			return $array
+}
+
+function Stage2 {
+param (
+        $Version,
+        $ReleaseId
+    )
+                       $array = @()
+ 			foreach ($Release in  $WindowsVersions[$Version][$ReleaseId])
+			{
+				if ($Release -is [array]) {
+					if (($Release[1] -lt 0x10000) -or ($Locale.StartsWith("ko") -and ($Release[1] -band $ko)) -or ($Locale.StartsWith("zh") -and ($Release[1] -band $zh))) {
+						$array += @(New-Object PsObject -Property @{ Edition = $Release[0]; Id = $($Release[1] -band 0xFFFF) })
+					}
+				}
+			}
+			
+			return $array
+}
+
+function Stage3 {
+param (
+        $Version,
+        $Edition
+    )
+			$array = @()
+			$i = 0;
+			if ($WindowsVersions[$Version][0][1] -eq "WIN7") {
+				foreach ($Entry in $Windows7Versions[$Edition]) {
+					if ($Entry[0] -ne "") {
+						$array += @(New-Object PsObject -Property @{ DisplayLanguage = $Entry[0]; Language = $Entry[1]; Id = $i })
+					}
+					$i++
+				}
+			} else {
+				$url = "https://www.microsoft.com/" + $QueryLocale + "/api/controls/contentinclude/html"
+				$url += "?pageId=" + $RequestData["GetLangs"][0]
+				$url += "&host=www.microsoft.com"
+				$url += "&segments=software-download," + $WindowsVersions[$Version][0][1] 
+				$url += "&query=&action=" + $RequestData["GetLangs"][1]
+				$url += "&sessionId=" + $SessionId
+				$url += "&productEditionId=" + [Math]::Abs($Edition)
+				$url += "&sdVersion=2"
+				Write-Host Querying $url
+
+				$SelectedIndex = 0
+				try {
+					$r = Invoke-WebRequest -UseBasicParsing -UserAgent $UserAgent -SessionVariable "Session" $url
+					$pattern = '(?s)<select id="product-languages">(.*)?</select>'
+					$html = [regex]::Match($r, $pattern).Groups[1].Value
+					# Go through an XML conversion to keep all PowerShells happy...
+					$html = $html.Replace("selected value", "value")
+					$html = "<options>" + $html + "</options>"
+					$xml = [xml]$html
+					foreach ($var in $xml.options.option) {
+						$json = $var.value | ConvertFrom-Json;
+						if ($json) {
+							$array += @(New-Object PsObject -Property @{ DisplayLanguage = $var.InnerText; Language = $json.language; Id = $json.id })
+							if (Select-Language($json.language)) {
+								$SelectedIndex = $i
+							}
+							$i++
+						}
+					}
+					if ($array.Length -eq 0) {
+						Throw-Error -Req $r -Alt "Could not parse languages"
+					}
+				} catch {
+					Error($_.Exception.Message)
+					break
+				}
+			}
+			
+			return $array
+}
+
+function Stage4 {
+param (
+        $VersionId,
+        $Edition,
+        $LanguageId,
+        $LanguageName
+    )
+                       $array = @()
+			if ($WindowsVersions[$VersionId][0][1] -eq "WIN7") {
+				foreach ($Version in $Windows7Versions[$Edition][$LanguageId][2]) {
+					$array += @(New-Object PsObject -Property @{ Type = $Version[0]; Link = $Version[1] })
+				}
+			} else {
+			        if ( ! $Headless ) {
+				  $XMLForm.Title = Get-Translation($English[12])
+				  Refresh-Control($XMLForm)
+				}
+				
+				$url = "https://www.microsoft.com/" + $QueryLocale + "/api/controls/contentinclude/html"
+				$url += "?pageId=" + $RequestData["GetLinks"][0]
+				$url += "&host=www.microsoft.com"
+				$url += "&segments=software-download," +  $WindowsVersions[$VersionId][0][1] 
+				$url += "&query=&action=" + $RequestData["GetLinks"][1]
+				$url += "&sessionId=" + $SessionId
+				$url += "&skuId=" + $LanguageId
+				$url += "&language=" + $LanguageName
+				$url += "&sdVersion=2"
+				Write-Host Querying $url
+
+				$i = 0
+				$SelectedIndex = 0
+
+				try {
+					$Is64 = [Environment]::Is64BitOperatingSystem
+					$r = Invoke-WebRequest -Method Post -UseBasicParsing -UserAgent $UserAgent -WebSession $Session $url
+					$pattern = '(?s)(<input.*?></input>)'
+					ForEach-Object { [regex]::Matches($r, $pattern) } | ForEach-Object { $html += $_.Groups[1].value }
+					$hashes = @{}
+					ForEach-Object { [regex]::Matches($r, '<tr><td>([\w]+)\s+(\d{2})\-bit</td><td>([A-F0-9]+)</td></tr>') } | ForEach-Object { 
+					    $arch = If ($_.Groups[2].value -eq "32") { "86" } else { $_.Groups[2].value } 
+					    $hashes["$($_.Groups[1].value)_x$($arch)"] = $_.Groups[3].value 
+					}
+
+					# Need to fix the HTML and JSON data so that it is well-formed
+					$html = $html.Replace("class=product-download-hidden", "")
+					$html = $html.Replace("type=hidden", "")
+					$html = $html.Replace("&nbsp;", " ")
+					$html = $html.Replace("IsoX86", "&quot;x86&quot;")
+					$html = $html.Replace("IsoX64", "&quot;x64&quot;")
+					$html = "<inputs>" + $html + "</inputs>"
+					
+					$xml = [xml]$html
+					foreach ($var in $xml.inputs.input) {
+						$json = $var.value | ConvertFrom-Json;
+						if ($json) {
+							if (($Is64 -and $json.DownloadType -eq "x64") -or (-not $Is64 -and $json.DownloadType -eq "x86")) {
+								$SelectedIndex = $i
+							}
+							
+							Write-Host $json
+							$hash = $hashes["$($LanguageName)_$($json.DownloadType)"]
+							$array += @(New-Object PsObject -Property @{ Type = $json.DownloadType; Link = $json.Uri; Hash = $hash })
+							$i++
+						}
+					}
+					if ($array.Length -eq 0) {
+						Throw-Error -Req $r -Alt "Could not retrieve ISO download links"
+					}
+				} catch {
+					Error($_.Exception.Message)
+					break
+				}
+			}
+			
+			return $array
+}
+
+
+function Stage5 {
+param (
+        $ArchLink,
+        $File = $null,
+        $Hash = $null
+    )
+                       if ($PipeName -and -not $Check.IsChecked) {
+				Send-Message -PipeName $PipeName -Message  $ArchLink
+				$script:ExitCode = 0
+			} elseif ($Headless) {
+			  Invoke-WebRequest -Uri $ArchLink -OutFile $File
+			  
+			  if($Hash) {
+			     $actualHash = Get-FileHash $File
+			     
+			     if($actualHash.Hash -eq $Hash) {
+			        Write-Host "Hash OK"
+			        $script:ExitCode = 0
+			     } else {
+			        Write-Host "Hash FAIL"
+			        $script:ExitCode = 1
+			     }
+			  }
+			} else {
+				Write-Host Download Link:  $ArchLink
+				Start-Process -FilePath  $ArchLink
+				$script:ExitCode = 0
+			}
+}
+
+if ( $Headless ) {
+  $winVersionId = $null
+  $winReleaseId = $null
+  $winEditionId = $null
+  $winLanguageId = $null
+  $winLanguageName = $null
+  $winLink = $null
+  
+  Write-Host "Available Versions"
+  $i = 0
+  foreach($Version in $WindowsVersions) {
+       Write-Host " -" $Version[0][0]
+       
+       if($Version[0][0] -eq $cliVersionName) {
+          $winVersionId = $i
+       }
+       
+       $i++
+  }
+
+  if ($winVersionId -eq $null) {
+     exit 1
+  }
+
+  # Windows Version selection
+  Write-Host "=== Stage 1 ==="
+  $releases = Stage1 $winVersionId
+  
+  Write-Host "Available Releases"
+  foreach($Release in $releases) {
+     Write-Host " -" $Release.Release
+     
+     if($cliReleaseName -eq $Release.Release) {
+        $winReleaseId = $Release.Index
+     }
+  }
+
+  if ($winReleaseId -eq $null) {
+     exit 1
+  }
+  
+  # Windows Release selection => Populate Product Edition
+  Write-Host "=== Stage 2 ==="
+  $editions = Stage2 $winVersionId $winReleaseId
+  
+  Write-Host "Available Editions"
+  foreach($edition in $editions) {
+     Write-Host " -" $edition.Edition
+     
+     if($cliEditionName -eq $edition.Edition) {
+        $winEditionId = $edition.Id
+     }
+  }
+  
+  if ($winEditionId -eq $null) {
+     exit 1
+  }
+
+  # Product Edition selection => Request and populate Languages
+  Write-Host "=== Stage 3 ==="
+  $languages = Stage3 $winVersionId $winEditionId
+  
+  Write-Host "Available Languages"
+  foreach($language in $languages) {
+     Write-Host " -" $language.Language
+     
+     if($cliLanguage -eq $language.Language) {
+        $winLanguageId = $language.Id
+        $winLanguageName = $language.Language
+     }
+  }
+  
+  if ($winLanguageId -eq $null -or $winLanguageName -eq $null) {
+     exit 1
+  }
+
+  # Language selection => Request and populate Arch download links
+  Write-Host "=== Stage 4 ==="
+  $architectures = Stage4 $winVersionId $winEditionId $winLanguageId $winLanguageName
+  
+  Write-Host "Available Architectures"
+  foreach($arch in $architectures) {
+     Write-Host " -" $arch.Type $arch.Hash
+     
+     if($cliArch -eq $arch.Type) {
+        $winLink = $arch
+     }
+  }
+
+  if ($winLink -eq $null) {
+     exit 1
+  }
+
+  # Arch selection => Return selected download link
+  Write-Host "=== Stage 5 ==="
+  Stage5 $winLink.Link $cliFilename  $winLink.Hash
+
+  # Clean up & exit
+  exit $ExitCode
 }
 
 # Form creation
@@ -569,23 +896,8 @@ $Continue.add_click({
 		1 { # Windows Version selection
 			$XMLForm.Title = Get-Translation($English[12])
 			Refresh-Control($XMLForm)
-			# Check if the locale we want is available - Fall back to en-US otherwise
-			try {
-				$url = "https://www.microsoft.com/" + $QueryLocale + "/software-download/"
-				Write-Host Querying $url
-				Invoke-WebRequest -UseBasicParsing -MaximumRedirection 0 -UserAgent $UserAgent $url | Out-Null
-			} catch {
-				$script:QueryLocale = "en-US"
-			}
-
-			$i = 0
-			$array = @()
-			foreach ($Version in $WindowsVersions[$WindowsVersion.SelectedValue.Index]) {
-				if (($i -ne 0) -and ($Version -is [array])) {
-					$array += @(New-Object PsObject -Property @{ Release = $ltrm + $Version[0].Replace(")", ")" + $ltrm); Index = $i })
-				}
-				$i++
-			}
+			
+			$array = Stage1 $WindowsVersion.SelectedValue.Index
 
 			$script:WindowsRelease = Add-Entry $Stage "Release" $array
 			$Back.Content = Get-Translation($English[8])
@@ -593,127 +905,21 @@ $Continue.add_click({
 		}
 
 		2 { # Windows Release selection => Populate Product Edition
-			$array = @()
-			foreach ($Release in  $WindowsVersions[$WindowsVersion.SelectedValue.Index][$WindowsRelease.SelectedValue.Index])
-			{
-				if ($Release -is [array]) {
-					if (($Release[1] -lt 0x10000) -or ($Locale.StartsWith("ko") -and ($Release[1] -band $ko)) -or ($Locale.StartsWith("zh") -and ($Release[1] -band $zh))) {
-						$array += @(New-Object PsObject -Property @{ Edition = $Release[0]; Id = $($Release[1] -band 0xFFFF) })
-					}
-				}
-			}
+			$array = Stage2 $WindowsVersion.SelectedValue.Index $WindowsRelease.SelectedValue.Index
 			$script:ProductEdition = Add-Entry $Stage "Edition" $array
 		}
 
 		3 { # Product Edition selection => Request and populate Languages
 			$XMLForm.Title = Get-Translation($English[12])
 			Refresh-Control($XMLForm)
-			$array = @()
-			$i = 0;
-			if ($WindowsVersion.SelectedValue.PageType -eq "WIN7") {
-				foreach ($Entry in $Windows7Versions[$ProductEdition.SelectedValue.Id]) {
-					if ($Entry[0] -ne "") {
-						$array += @(New-Object PsObject -Property @{ DisplayLanguage = $Entry[0]; Language = $Entry[1]; Id = $i })
-					}
-					$i++
-				}
-			} else {
-				$url = "https://www.microsoft.com/" + $QueryLocale + "/api/controls/contentinclude/html"
-				$url += "?pageId=" + $RequestData["GetLangs"][0]
-				$url += "&host=www.microsoft.com"
-				$url += "&segments=software-download," + $WindowsVersion.SelectedValue.PageType
-				$url += "&query=&action=" + $RequestData["GetLangs"][1]
-				$url += "&sessionId=" + $SessionId
-				$url += "&productEditionId=" + [Math]::Abs($ProductEdition.SelectedValue.Id)
-				$url += "&sdVersion=2"
-				Write-Host Querying $url
-
-				$SelectedIndex = 0
-				try {
-					$r = Invoke-WebRequest -UseBasicParsing -UserAgent $UserAgent -SessionVariable "Session" $url
-					$pattern = '(?s)<select id="product-languages">(.*)?</select>'
-					$html = [regex]::Match($r, $pattern).Groups[1].Value
-					# Go through an XML conversion to keep all PowerShells happy...
-					$html = $html.Replace("selected value", "value")
-					$html = "<options>" + $html + "</options>"
-					$xml = [xml]$html
-					foreach ($var in $xml.options.option) {
-						$json = $var.value | ConvertFrom-Json;
-						if ($json) {
-							$array += @(New-Object PsObject -Property @{ DisplayLanguage = $var.InnerText; Language = $json.language; Id = $json.id })
-							if (Select-Language($json.language)) {
-								$SelectedIndex = $i
-							}
-							$i++
-						}
-					}
-					if ($array.Length -eq 0) {
-						Throw-Error -Req $r -Alt "Could not parse languages"
-					}
-				} catch {
-					Error($_.Exception.Message)
-					break
-				}
-			}
+                       $array = Stage3 $WindowsVersion.SelectedValue.Index $ProductEdition.SelectedValue.Id
 			$script:Language = Add-Entry $Stage "Language" $array "DisplayLanguage"
 			$Language.SelectedIndex = $SelectedIndex
 			$XMLForm.Title = $AppTitle
 		}
 
 		4 { # Language selection => Request and populate Arch download links
-			$array = @()
-			if ($WindowsVersion.SelectedValue.PageType -eq "WIN7") {
-				foreach ($Version in $Windows7Versions[$ProductEdition.SelectedValue.Id][$Language.SelectedValue.Id][2]) {
-					$array += @(New-Object PsObject -Property @{ Type = $Version[0]; Link = $Version[1] })
-				}
-			} else {
-				$XMLForm.Title = Get-Translation($English[12])
-				Refresh-Control($XMLForm)
-				$url = "https://www.microsoft.com/" + $QueryLocale + "/api/controls/contentinclude/html"
-				$url += "?pageId=" + $RequestData["GetLinks"][0]
-				$url += "&host=www.microsoft.com"
-				$url += "&segments=software-download," + $WindowsVersion.SelectedValue.PageType
-				$url += "&query=&action=" + $RequestData["GetLinks"][1]
-				$url += "&sessionId=" + $SessionId
-				$url += "&skuId=" + $Language.SelectedValue.Id
-				$url += "&language=" + $Language.SelectedValue.Language
-				$url += "&sdVersion=2"
-				Write-Host Querying $url
-
-				$i = 0
-				$SelectedIndex = 0
-
-				try {
-					$Is64 = [Environment]::Is64BitOperatingSystem
-					$r = Invoke-WebRequest -UseBasicParsing -UserAgent $UserAgent -WebSession $Session $url
-					$pattern = '(?s)(<input.*?/>)'
-					ForEach-Object { [regex]::Matches($r, $pattern) } | ForEach-Object { $html += $_.Groups[1].value }
-					# Need to fix the HTML and JSON data so that it is well-formed
-					$html = $html.Replace("class=product-download-hidden", "")
-					$html = $html.Replace("type=hidden", "")
-					$html = $html.Replace("&nbsp;", " ")
-					$html = $html.Replace("IsoX86", "&quot;x86&quot;")
-					$html = $html.Replace("IsoX64", "&quot;x64&quot;")
-					$html = "<inputs>" + $html + "</inputs>"
-					$xml = [xml]$html
-					foreach ($var in $xml.inputs.input) {
-						$json = $var.value | ConvertFrom-Json;
-						if ($json) {
-							if (($Is64 -and $json.DownloadType -eq "x64") -or (-not $Is64 -and $json.DownloadType -eq "x86")) {
-								$SelectedIndex = $i
-							}
-							$array += @(New-Object PsObject -Property @{ Type = $json.DownloadType; Link = $json.Uri })
-							$i++
-						}
-					}
-					if ($array.Length -eq 0) {
-						Throw-Error -Req $r -Alt "Could not retrieve ISO download links"
-					}
-				} catch {
-					Error($_.Exception.Message)
-					break
-				}
-			}
+			$array = Stage4 $WindowsVersion.SelectedValue.Index $ProductEdition.SelectedValue.Id $Language.SelectedValue.Id $Language.SelectedValue.Language
 
 			$script:Arch = Add-Entry $Stage "Architecture" $array "Type"
 			if ($PipeName) {
@@ -737,13 +943,7 @@ $Continue.add_click({
 		}
 
 		5 { # Arch selection => Return selected download link
-			if ($PipeName -and -not $Check.IsChecked) {
-				Send-Message -PipeName $PipeName -Message $Arch.SelectedValue.Link
-			} else {
-				Write-Host Download Link: $Arch.SelectedValue.Link
-				Start-Process -FilePath $Arch.SelectedValue.Link
-			}
-			$script:ExitCode = 0
+			Stage5 $Arch.SelectedValue.Link
 			$XMLForm.Close()
 		}
 	}
