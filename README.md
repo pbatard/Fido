@@ -1,4 +1,4 @@
-Fido: Full ISO Download Script (for Windows retail ISOs)
+﻿Fido: Full ISO Download Script (for Windows retail ISOs)
 ========================================================
 
 [![Licence](https://img.shields.io/badge/license-GPLv3-blue.svg?style=flat-square)](https://www.gnu.org/licenses/gpl-3.0.en.html)
@@ -74,3 +74,21 @@ to add support for LTSB/LTSC Windows 10 ISOs downloads.
 
 If you are interested in such downloads, then you are kindly invited to visit the relevant download pages from Microsoft
 such as [this one](https://www.microsoft.com/evalcenter/evaluate-windows-10-enterprise) for LTSC versions.
+
+Command Line Usage
+------------------
+
+This script can be used in a headless environment by passing the `-Headless` Flag.
+
+The script will present the possible values of the first omitted parameters.
+
+The output file name can optionally be specified with `-cliFilename`.
+
+##### Examples
+
+- Download the latest Windows 10 ISO for x64:
+  `powershell -ExecutionPolicy bypass .\Fido.ps1 -Headless -cliVersionName 'Windows 10' -cliReleaseName latest -cliEditionName 'Windows 10 Home/Pro' -cliLanguage English -cliArch x64`
+
+
+- Download a specific Windows 10 ISO:
+  `powershell -ExecutionPolicy bypass .\Fido.ps1 -Headless -cliVersionName 'Windows 10' -cliReleaseName latest -cliEditionName 'Windows 10 Home/Pro' -cliLanguage English -cliArch x64`

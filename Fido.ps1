@@ -731,11 +731,14 @@ param (
         $File = $null,
         $Hash = $null
     )
-                       if ($PipeName -and -not $Check.IsChecked) {
+            if ($PipeName -and -not $Check.IsChecked) {
 				Send-Message -PipeName $PipeName -Message  $ArchLink
 				$script:ExitCode = 0
 			} elseif ($Headless) {
-			  Invoke-WebRequest -Uri $ArchLink -OutFile $File
+			  Write-Host "Downloading $ArchLink into $File"
+
+			  Import-Module BitsTransfer
+			  Start-BitsTransfer -Priority Foreground -Source $ArchLink -Destination $File
 			  
 			  if($Hash) {
 			     $actualHash = Get-FileHash $File
@@ -790,6 +793,10 @@ if ( $Headless ) {
      if($cliReleaseName -eq $Release.Release) {
         $winReleaseId = $Release.Index
      }
+  }
+
+  if($cliReleaseName -eq 'latest') {
+	 $winReleaseId = $releases[0].Index
   }
 
   if ($winReleaseId -eq $null) {
