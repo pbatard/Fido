@@ -736,9 +736,9 @@ param (
 				$script:ExitCode = 0
 			} elseif ($Headless) {
 			  Write-Host "Downloading $ArchLink into $File"
-
-			  Import-Module BitsTransfer
-			  Start-BitsTransfer -Priority Foreground -Source $ArchLink -Destination $File
+			  
+			  $client = New-Object System.Net.WebClient
+			  $client.DownloadFile($ArchLink, $File)
 			  
 			  if($Hash) {
 			     $actualHash = Get-FileHash $File
