@@ -65,6 +65,43 @@ of Windows 7).
 Note that the current version of the script does not need Internet Explorer to be installed and should also work with
 PowerShell 7.
 
+Commandline mode
+----------------
+
+Fido supports commandline mode whereas, whenever one of the following options is provided, a GUI is not instantiated
+and you can instead generate the ISO download from within a PowerShell console or script.
+
+The options are:
+- `Win`: Specify Windows version (e.g. _"Windows 10"_). Abbreviated version should work as well (e.g `-Win 10`) as long
+   as it is unique enough. If this option isn't specified, the most recent version of Windows is automatically selected.  
+   You can obtain a list of supported versions by specifying `-Win List`.
+- `Rel`: Specify Windows release (e.g. _"21H1"_). If this option isn't specified, the most recent release for the chosen
+   version of Windows is automatically selected. You can also use `-Rel Latest` to force the most recent to be used.
+   You can obtain a list of supported versions by specifying `-Rel List`.
+- `Ed`: Specify Windows edition (e.g. _"Pro/Home"_). Abbreviated editions should work as well (e.g `-Ed Pro`) as long
+   as it is unique enough. If this option isn't specified, the most recent version of Windows is automatically selected.  
+   You can obtain a list of supported versions by specifying `-Ed List`.
+- `Lang`: Specify Windows language (e.g. _"Arabic"_). Abbreviated or part of a language (e.g. `-Lang Int` for
+   `English International` should work as long as it's unique enough. If this option isn't specified, the script attempts
+   to select the same language as the system locale.  
+   You can obtain a list of supported languages by specifying `-Lang List`.
+- `Arch`: Specify Windows architecture (e.g. _"x64"_). If this option isn't specified, the script attempts to use the same
+   architecture as the one from the current system.
+- `GetUrl`: By default, the script attempts to automatically launch the download. But when using the `-GetUrl` switch,
+   the script only displays the download URL, which can then be piped into another command or into a file.
+
+Examples of a commandline download:
+
+```
+PS C:\Projects\Fido> .\Fido.ps1 -Win 10 -Rel Latest
+No edition specified (-Ed). Defaulting to 'Windows 10 Home/Pro'.
+No language specified (-Lang). Defaulting to 'English International'.
+No architecture specified (-Arch). Defaulting to 'x64'.
+Downloading 'Win10_21H1_EnglishInternational_x64.iso'...
+PS C:\Projects\Fido> .\Fido.ps1 -Win 10 -Rel 20H2 -Ed Edu -Lang Fre -Arch x86 -GetUrl
+https://software-download.microsoft.com/db/Win10_Edu_20H2_French_x32.iso?t=fb914101-aaaa-4e0d-b686-e187a205e202&e=1628437094&h=8a2e25a6346e630c817cdca9fadbe588
+```
+
 Additional Notes
 ----------------
 

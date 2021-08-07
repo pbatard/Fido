@@ -1,6 +1,7 @@
 ﻿#
 # Fido v1.20 - Retail Windows ISO Downloader
 # Copyright © 2019-2021 Pete Batard <pete@akeo.ie>
+# Command line support: Copyright © 2021 flx5
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
 #
 # This program is free software: you can redistribute it and/or modify
@@ -30,14 +31,32 @@ param(
 	[string]$Icon,
 	# (Optional) Name of a pipe the download URL should be sent to.
 	# If not provided, a browser window is opened instead.
-	[string]$PipeName
+	[string]$PipeName,
+	# (Optional) Specify Windows version (e.g. "Windows 10") [Toggles commandline mode]
+	[string]$Win,
+	# (Optional) Specify Windows release (e.g. "21H1") [Toggles commandline mode]
+	[string]$Rel,
+	# (Optional) Specify Windows edition (e.g. "Pro") [Toggles commandline mode]
+	[string]$Ed,
+	# (Optional) Specify Windows language [Toggles commandline mode]
+	[string]$Lang,
+	# (Optional) Specify Windows architecture [Toggles commandline mode]
+	[string]$Arch,
+	# (Optional) Only display the download URL [Toggles commandline mode]
+	[switch]$GetUrl = $False,
+	# (Optional) Increase verbosity
+	[switch]$Verbose = $False
 )
 #endregion
 
 try {
 	[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 } catch {}
-Write-Host Please Wait...
+
+$Cmd = $False
+if ($Win -or $Rel -or $Ed -or $Lang -or $Arch -or $GetUrl) {
+	$Cmd = $True
+}
 
 #region Assembly Types
 $code = @"
@@ -59,14 +78,17 @@ $code = @"
 	}
 "@
 
-if ($host.version -ge "7.0") {
-  Add-Type -WarningAction Ignore -IgnoreWarnings -MemberDefinition $code -Namespace Gui -UsingNamespace System.Runtime, System.IO, System.Text, System.Drawing, System.Globalization -ReferencedAssemblies System.Drawing.Common -Name Utils -ErrorAction Stop
-} else {
-  Add-Type -MemberDefinition $code -Namespace Gui -UsingNamespace System.IO, System.Text, System.Drawing, System.Globalization -ReferencedAssemblies System.Drawing -Name Utils -ErrorAction Stop
+if (!$Cmd) {
+	Write-Host Please Wait...
+	if ($host.version -ge "7.0") {
+		Add-Type -WarningAction Ignore -IgnoreWarnings -MemberDefinition $code -Namespace Gui -UsingNamespace System.Runtime, System.IO, System.Text, System.Drawing, System.Globalization -ReferencedAssemblies System.Drawing.Common -Name Utils -ErrorAction Stop
+	} else {
+		Add-Type -MemberDefinition $code -Namespace Gui -UsingNamespace System.IO, System.Text, System.Drawing, System.Globalization -ReferencedAssemblies System.Drawing -Name Utils -ErrorAction Stop
+	}
+	Add-Type -AssemblyName PresentationFramework
+	# Hide the powershell window: https://stackoverflow.com/a/27992426/1069307
+	[Gui.Utils]::ShowWindow(([System.Diagnostics.Process]::GetCurrentProcess() | Get-Process).MainWindowHandle, 0) | Out-Null
 }
-Add-Type -AssemblyName PresentationFramework
-# Hide the powershell window: https://stackoverflow.com/a/27992426/1069307
-[Gui.Utils]::ShowWindow(([System.Diagnostics.Process]::GetCurrentProcess() | Get-Process).MainWindowHandle, 0) | Out-Null
 #endregion
 
 #region Data
@@ -209,7 +231,7 @@ $WindowsVersions = @(
 		@("Windows 8.1", "windows8ISO"),
 		@(
 			"Update 3 (build 9600)",
-			@("Windows 8.1", 52),
+			@("Windows 8.1 Standard", 52),
 			@("Windows 8.1 N", 55)
 			@("Windows 8.1 Single Language", 48),
 			@("Windows 8.1 K", ($ko + 61)),
@@ -452,11 +474,15 @@ function GetElementById([object]$Request, [string]$Id)
 function Error([string]$ErrorMessage)
 {
 	Write-Host Error: $ErrorMessage
-	$XMLForm.Title = $(Get-Translation("Error")) + ": " + $ErrorMessage
-	Refresh-Control($XMLForm)
-	$XMLGrid.Children[2 * $script:Stage + 1].IsEnabled = $True
-	$UserInput = [System.Windows.MessageBox]::Show($XMLForm.Title,  $(Get-Translation("Error")), "OK", "Error")
-	$script:ExitCode = $script:Stage--
+	if (!$Cmd) {
+		$XMLForm.Title = $(Get-Translation("Error")) + ": " + $ErrorMessage
+		Refresh-Control($XMLForm)
+		$XMLGrid.Children[2 * $script:Stage + 1].IsEnabled = $True
+		$UserInput = [System.Windows.MessageBox]::Show($XMLForm.Title,  $(Get-Translation("Error")), "OK", "Error")
+		$script:ExitCode = $script:Stage--
+	} else {
+		$script:ExitCode = 2
+	}
 }
 
 function Get-RandomDate()
@@ -491,6 +517,9 @@ $dh = 58
 $Stage = 0
 $SelectedIndex = 0
 $ltrm = "‎"
+if ($Cmd) {
+	$ltrm = ""
+}
 $MaxStage = 4
 $SessionId = [guid]::NewGuid()
 $ExitCode = 100
@@ -504,6 +533,10 @@ $RequestData["GetLinks"] = @("a224afab-2097-4dfa-a2ba-463eb191a285", "GetProduct
 $FirefoxVersion = Get-Random -Minimum 50 -Maximum 90
 $FirefoxDate = Get-RandomDate
 $UserAgent = "Mozilla/5.0 (X11; Linux i586; rv:$FirefoxVersion.0) Gecko/$FirefoxDate Firefox/$FirefoxVersion.0"
+$Verbosity = 0
+if ($Verbose) {
+	$Verbosity = 1
+}
 #endregion
 
 # Localization
@@ -536,7 +569,9 @@ if ($PSVersionTable.PSVersion.Major -lt 3) {
 function Check-Locale {
 	try {
 		$url = "https://www.microsoft.com/" + $QueryLocale + "/software-download/"
-		Write-Host Querying $url
+		if (!$Cmd -or $Verbose) {
+			Write-Host Querying $url
+		}
 		Invoke-WebRequest -UseBasicParsing -MaximumRedirection 0 -UserAgent $UserAgent $url | Out-Null
 	} catch {
 		$script:QueryLocale = "en-US"
@@ -593,11 +628,16 @@ function Get-Windows-Languages([int]$SelectedVersion, [int]$SelectedEdition)
 		$url += "&sessionId=" + $SessionId
 		$url += "&productEditionId=" + [Math]::Abs($SelectedEdition)
 		$url += "&sdVersion=2"
-		Write-Host Querying $url
+		if (!$Cmd -or $Verbose) {
+			Write-Host Querying $url
+		}
 
 		$script:SelectedIndex = 0
 		try {
 			$r = Invoke-WebRequest -UseBasicParsing -UserAgent $UserAgent -SessionVariable "Session" $url
+			if ($r -match "errorModalMessage") {
+				Throw-Error -Req $r -Alt "Could not retrieve languages from server"
+			}
 			$pattern = '(?s)<select id="product-languages">(.*)?</select>'
 			$html = [regex]::Match($r, $pattern).Groups[1].Value
 			# Go through an XML conversion to keep all PowerShells happy...
@@ -643,7 +683,9 @@ function Get-Windows-Download-Links([int]$SelectedVersion, [int]$SelectedEdition
 		$url += "&skuId=" + $SkuId
 		$url += "&language=" + $LanguageName
 		$url += "&sdVersion=2"
-		Write-Host Querying $url
+		if (!$Cmd -or $Verbose) {
+			Write-Host Querying $url
+		}
 
 		$i = 0
 		$script:SelectedIndex = 0
@@ -651,6 +693,9 @@ function Get-Windows-Download-Links([int]$SelectedVersion, [int]$SelectedEdition
 		try {
 			$Is64 = [Environment]::Is64BitOperatingSystem
 			$r = Invoke-WebRequest -Method Post -UseBasicParsing -UserAgent $UserAgent -WebSession $Session $url
+			if ($r -match "errorModalMessage") {
+				Throw-Error -Req $r -Alt "Could not retrieve architectures from server"
+			}
 			$pattern = '(?s)(<input.*?></input>)'
 			ForEach-Object { [regex]::Matches($r, $pattern) } | ForEach-Object { $html += $_.Groups[1].value }
 			# Need to fix the HTML and JSON data so that it is well-formed
@@ -688,9 +733,170 @@ function Process-Download-Link([string]$Url)
 	if ($PipeName -and -not $Check.IsChecked) {
 		Send-Message -PipeName $PipeName -Message $Url
 	} else {
-		Write-Host Download Link: $Url
-		Start-Process -FilePath $Url
+		if ($Cmd) {
+			$pattern = '.*\/(.*\.iso).*'
+			$File = [regex]::Match($Url, $pattern).Groups[1].Value	
+			Write-Host "Downloading '$File'..."
+			Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $File
+		} else {
+			Write-Host Download Link: $Url
+			Start-Process -FilePath $Url
+		}
 	}
+}
+
+if ($Cmd) {
+	$winVersionId = $null
+	$winReleaseId = $null
+	$winEditionId = $null
+	$winLanguageId = $null
+	$winLanguageName = $null
+	$winLink = $null
+
+	$i = 0
+	$Selected = ""
+	if ($Win -eq "List") {
+		Write-Host "Please select a Windows Version (-Win):"
+	}
+	foreach($version in $WindowsVersions) {
+		if ($Win -eq "List") {
+			Write-Host " -" $version[0][0]
+		} elseif ($version[0][0] -match $Win) {
+			$Selected += $version[0][0]
+			$winVersionId = $i
+			break;
+		}
+		$i++
+	}
+	if ($winVersionId -eq $null) {
+		if ($Win -ne "List") {
+			Write-Host "Invalid Windows version provided."
+			Write-Host "Use '-Win List' for a list of available Windows versions."
+		}
+		exit 1
+	}
+
+	# Windows Version selection
+	$releases = Get-Windows-Releases $winVersionId
+	if ($Rel -eq "List") {
+		Write-Host "Please select a Windows Release (-Rel) for ${Selected} (or use 'Latest' for most recent):"
+	}
+	foreach ($release in $releases) {
+		if ($Rel -eq "List") {
+			Write-Host " -" $release.Release
+		} elseif (!$Rel -or $release.Release.StartsWith($Rel) -or $Rel -eq "Latest") {
+			if (!$Rel -and $Verbosity -ge 1) {
+				Write-Host "No release specified (-Rel). Defaulting to '$($release.Release)'."
+			}
+			$Selected += " " + $release.Release
+			$winReleaseId = $release.Index
+			break;
+		}
+	}
+	if ($winReleaseId -eq $null) {
+		if ($Rel -ne "List") {
+			Write-Host "Invalid Windows release provided."
+			Write-Host "Use '-Rel List' for a list of available $Selected releases or '-Rel Latest' for latest."
+		}
+		exit 1
+	}
+
+	# Windows Release selection => Populate Product Edition
+	$editions = Get-Windows-Editions $winVersionId $winReleaseId
+	if ($Ed -eq "List") {
+		Write-Host "Please select a Windows Edition (-Ed) for ${Selected}:"
+	}
+	foreach($edition in $editions) {
+		if ($Ed -eq "List") {
+			Write-Host " -" $edition.Edition
+		} elseif (!$Ed -or $edition.Edition -match $Ed) {
+			if (!$Ed -and $Verbosity -ge 1) {
+				Write-Host "No edition specified (-Ed). Defaulting to '$($edition.Edition)'."
+			}
+			$Selected += "," + $edition.Edition -replace "Windows [0-9\.]*", ""
+			$winEditionId = $edition.Id
+			break;
+		}
+	}
+	if ($winEditionId -eq $null) {
+		if ($Ed -ne "List") {
+			Write-Host "Invalid Windows edition provided."
+			Write-Host "Use '-Ed List' for a list of available editions or remove the -Ed parameter to use default."
+		}
+		exit 1
+	}
+
+	# Product Edition selection => Request and populate Languages
+	$languages = Get-Windows-Languages $winVersionId $winEditionId
+	if (!$languages) {
+		exit 3
+	}
+	if ($Lang -eq "List") {
+		Write-Host "Please select a Language (-Lang) for ${Selected}:"
+	}
+	$i = 0
+	foreach ($language in $languages) {
+		if ($Lang -eq "List") {
+			Write-Host " -" $language.Language
+		} elseif ((!$Lang -and $script:SelectedIndex -eq $i) -or ($Lang -and $language.Language -match $Lang)) {
+			if (!$Lang -and $Verbosity -ge 1) {
+				Write-Host "No language specified (-Lang). Defaulting to '$($language.Language)'."
+			}
+			$Selected += ", " + $language.Language
+			$winLanguageId = $language.Id
+			$winLanguageName = $language.Language
+			break;
+		}
+		$i++
+	}
+	if ($winLanguageId -eq $null -or $winLanguageName -eq $null) {
+		if ($Lang -ne "List") {
+			Write-Host "Invalid Windows language provided."
+			Write-Host "Use '-Lang List' for a list of available languages or remove the option to use system default."
+		}
+		exit 1
+	}
+
+	# Language selection => Request and populate Arch download links
+	$links = Get-Windows-Download-Links $winVersionId $winEditionId $winLanguageId $winLanguageName
+	if (!$links) {
+		exit 3
+	}
+	if ($Arch -eq "List") {
+		Write-Host "Please select an Architecture (-Arch) for ${Selected}:"
+	}
+	$i = 0
+	foreach ($link in $links) {
+		if ($Arch -eq "List") {
+			Write-Host " -" $link.Type
+		} elseif ((!$Arch -and $script:SelectedIndex -eq $i) -or ($Arch -and $link.Type -match $Arch)) {
+			if (!$Arch -and $Verbosity -ge 1) {
+				Write-Host "No architecture specified (-Arch). Defaulting to '$($link.Type)'."
+			}
+			$Selected += ", " + $link.Type
+			$winLink = $link
+			break;
+		}
+		$i++
+	}
+	if ($winLink -eq $null) {
+		if ($Arch -ne "List") {
+			Write-Host "Invalid Windows architecture provided."
+			Write-Host "Use '-Arch List' for a list of available architectures or remove the option to use system default."
+		}
+		exit 1
+	}
+
+	# Arch selection => Return selected download link
+	if ($GetUrl) {
+		Write-Host $winLink.Link
+	} else {
+		Write-Host "Selected: $Selected"
+		Process-Download-Link $winLink.Link
+	}
+
+	# Clean up & exit
+	exit $ExitCode
 }
 
 # Form creation
@@ -702,7 +908,7 @@ if ($Icon) {
 } else {
 	$XMLForm.Icon = [Gui.Utils]::ExtractIcon("shell32.dll", -41, $true) | ConvertTo-ImageSource
 }
-if ($Locale.StartsWith("ar") -or  $Locale.StartsWith("fa") -or $Locale.StartsWith("he")) {
+if ($Locale.StartsWith("ar") -or $Locale.StartsWith("fa") -or $Locale.StartsWith("he")) {
 	$XMLForm.FlowDirection = "RightToLeft"
 }
 $WindowsVersionTitle.Text = Get-Translation("Version")
@@ -764,7 +970,7 @@ $Continue.add_click({
 			if ($links.Length -eq 0) {
 				break
 			}
-			$script:Arch = Add-Entry $Stage "Architecture" $links "Type"
+			$script:Architecture = Add-Entry $Stage "Architecture" $links "Type"
 			if ($PipeName) {
 				$XMLForm.Height += $dh / 2;
 				$Margin = $Continue.Margin
@@ -780,13 +986,13 @@ $Continue.add_click({
 				$Check.Content = Get-Translation($English[13])
 				$Check.Visibility = "Visible"
 			}
-			$Arch.SelectedIndex = $script:SelectedIndex
+			$Architecture.SelectedIndex = $script:SelectedIndex
 			$Continue.Content = Get-Translation("Download")
 			$XMLForm.Title = $AppTitle
 		}
 
 		5 { # Arch selection => Return selected download link
-			Process-Download-Link $Arch.SelectedValue.Link
+			Process-Download-Link $Architecture.SelectedValue.Link
 			$script:ExitCode = 0
 			$XMLForm.Close()
 		}
@@ -837,8 +1043,8 @@ exit $ExitCode
 # SIG # Begin signature block
 # MIIm3wYJKoZIhvcNAQcCoIIm0DCCJswCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU5yzyhB7xB9Ie7S056ccu7PP0
-# L2eggiCiMIIDXzCCAkegAwIBAgILBAAAAAABIVhTCKIwDQYJKoZIhvcNAQELBQAw
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU/L412YdnIqFymsnYAgDOGvme
+# DtKggiCiMIIDXzCCAkegAwIBAgILBAAAAAABIVhTCKIwDQYJKoZIhvcNAQELBQAw
 # TDEgMB4GA1UECxMXR2xvYmFsU2lnbiBSb290IENBIC0gUjMxEzARBgNVBAoTCkds
 # b2JhbFNpZ24xEzARBgNVBAMTCkdsb2JhbFNpZ24wHhcNMDkwMzE4MTAwMDAwWhcN
 # MjkwMzE4MTAwMDAwWjBMMSAwHgYDVQQLExdHbG9iYWxTaWduIFJvb3QgQ0EgLSBS
@@ -1017,30 +1223,30 @@ exit $ExitCode
 # T01PRE8gQ0EgTGltaXRlZDEjMCEGA1UEAxMaQ09NT0RPIFJTQSBDb2RlIFNpZ25p
 # bmcgQ0ECECRpJmPvbAwKOyPPoxDDZJswCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcC
 # AQwxCjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYB
-# BAGCNwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFHSgabWDiKT0
-# kFTQHrkkzG7GqWwHMA0GCSqGSIb3DQEBAQUABIIBAA94kPua+V1jjChd8NH7snaF
-# /dgAG99AUxpguCkYcV8Pn+FCruH34XjYirRA4NowZAjXbHj+UmT9eYC0kAfvXLsn
-# BO+tfr6ffQa3lAVDUj+Ord/uPhPyV8FTfcXO48VlTK5aziKRUrZLyllpDMoihKEI
-# xtxgPFj+8fOMmOzLw22IzcmOLOKIV010f/54aFjbF+OhddAtPeGcVipH6kfG/PLZ
-# gZ4aUjuV8qTZtRZehSWx1tte8xvpBH3TKhlQn8mFB8EtGLNcen1EXeFrOSmNBBCx
-# z8GT5q+nkl5qWPhx5bSQ3j9uIXq1Y+xG5aqR2/YN7x1h3hI2GZcEdSOOTb9aOt6h
+# BAGCNwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFNjCGFk20sPC
+# Cpi9ZluvDPRcbQNiMA0GCSqGSIb3DQEBAQUABIIBALeyMVfNZvv8ADrtW/SWGXi9
+# 30lhtesUfS+9TWT9d6AIuv9ooJI2itDBwcPBHy4iV3gnIV+sEbJQN3319fcYP7Er
+# aUTU3MmGpFvNiuU5IUuMAVSGZz8fgwjHdifFLghBb6dELltlYdX23u/tz5S+o4RX
+# 7LZrRa7eRcu3sAYAG6O4z1AnhzHg/Z68re0gGGC2zv4g9nQrPLsTNscaULChxcA9
+# dLrJwbIZuZCvWivy26HRzVUrxiY8nK4WDIErHDQ3jl36ycyIBb+hdl61PCWLDKPs
+# 0PUt5hI4IIKdL4CWGREz26vgaIZssZcTZdWZLX1xKwc54FhrSezJPwW2Ae8WC4yh
 # ggNwMIIDbAYJKoZIhvcNAQkGMYIDXTCCA1kCAQEwbzBbMQswCQYDVQQGEwJCRTEZ
 # MBcGA1UEChMQR2xvYmFsU2lnbiBudi1zYTExMC8GA1UEAxMoR2xvYmFsU2lnbiBU
 # aW1lc3RhbXBpbmcgQ0EgLSBTSEEzODQgLSBHNAIQAYTTqM43getX9P2He4OusjAN
 # BglghkgBZQMEAgEFAKCCAT8wGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkq
-# hkiG9w0BCQUxDxcNMjEwODA2MjAzNzMxWjAtBgkqhkiG9w0BCTQxIDAeMA0GCWCG
-# SAFlAwQCAQUAoQ0GCSqGSIb3DQEBCwUAMC8GCSqGSIb3DQEJBDEiBCBnBz20+9Eg
-# DNDIFUZ0tcrA3PX6vneV+vtEQoOI2axwyTCBpAYLKoZIhvcNAQkQAgwxgZQwgZEw
+# hkiG9w0BCQUxDxcNMjEwODA3MjEzMDMxWjAtBgkqhkiG9w0BCTQxIDAeMA0GCWCG
+# SAFlAwQCAQUAoQ0GCSqGSIb3DQEBCwUAMC8GCSqGSIb3DQEJBDEiBCCcvqCWuD80
+# KNl9ZWmLr4VnwtUXdbgMURXSuFa/UXlNfDCBpAYLKoZIhvcNAQkQAgwxgZQwgZEw
 # gY4wgYsEFN1XtbOHPIYbKcauxHMa++iNdcFJMHMwX6RdMFsxCzAJBgNVBAYTAkJF
 # MRkwFwYDVQQKExBHbG9iYWxTaWduIG52LXNhMTEwLwYDVQQDEyhHbG9iYWxTaWdu
 # IFRpbWVzdGFtcGluZyBDQSAtIFNIQTM4NCAtIEc0AhABhNOozjeB61f0/Yd7g66y
-# MA0GCSqGSIb3DQEBCwUABIIBgKdqzuxRLglJlYPDrqXGviBKqWpb8N8B5qHyGGdI
-# 1dHsIumXeGQt2+Ua978LtRisI1LHy3yNWYQQ/OkviTDAM0L2Q4cEBxiyBmzbQQi+
-# HlcTe/yw8zU4R3t2vzx4qAEpBcaex33pel6pflJ34s9b3+npfalgsKDDPcJ1ACFR
-# Z9jhFki5BieV75MmvliVXM+Kxs5qBn3zqOSJoEhejbCfQcaP6XnVDdrMyYuZnCXA
-# iPnzAQUMiKraO+uKx1ivK7v4n7sjAG0Is5izoneIVclBd+fII7k6hOSRGH3WivP4
-# UND1Z8+HVCStyA+EE6VfioIbc3xnaOPMpMwBl21xELZm4L7EYyEZqFccKNB0LxWJ
-# l1y1dE8uewm8Xii+3OiDkp9bFpVc0eBgzpZ3M4SdGSN51DmunRmfToXC9840hZ5b
-# dOp5iOKonlTGzkdvFR1P8x2m7DAmoB+jX83MBPLA5EoZdiAOZR+fG6c4/qz/wsyw
-# Nw6mR724FE4VFOaE4QVh6a+mKQ==
+# MA0GCSqGSIb3DQEBCwUABIIBgL0I1stv/LKS2eWaUOkrWDchIY1XL2wQQLyu+F/w
+# 43dFR16c1rzL2SwyiQx85whTxivm24WJQFWyAtEFUqrXfboL0WW6RoFtgIKi0PEX
+# ecpdrD2ECiGnGnVrgHMoyB0t7m9WzwItEpGMgmiLfqWP63tv3/foVFC5/0rn0D65
+# EOm5BEgOvsvJgPb+RtFHgzPGU7Srj+OqJmiRjxy+CzZee3hKHCWzwB09jd0XhVCT
+# hb1ycICO3lKkiTFtXXh02o35jm7YQaC53ibMnCeWrIyHfx/PNWFFKARpLMndwrkY
+# cVZDLmMOKYKdyD9nUWNZ/hDCJOh856e0xJNJ0Ov39Edl8SF6P4ghR3nYQqN5zbWV
+# y2Ee6Aaifjej/M9/UoqNJELXtojy+YWUVmK0CFAAGEzyar2o5n4/dPaeu0f+7/AV
+# 5H+HdRMoxmllQrmSVY9A7Bz/xlE4qxchhxfUP+kEbs6uz0AqpDVQj9B2fwFDYLs0
+# Kzy+fokB/NwBSYEWoRMPc8oRSg==
 # SIG # End signature block
