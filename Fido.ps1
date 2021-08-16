@@ -570,7 +570,7 @@ if ($PSVersionTable.PSVersion.Major -lt 3) {
 }
 
 # Convert a size in bytes to a human readable string
-function Size-To-Human-Readable([uint64]$size) 
+function Size-To-Human-Readable([uint64]$size)
 {
 	$suffix = "bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"
 	$i = 0
@@ -639,7 +639,7 @@ function Get-Windows-Languages([int]$SelectedVersion, [int]$SelectedEdition)
 		$url = "https://www.microsoft.com/" + $QueryLocale + "/api/controls/contentinclude/html"
 		$url += "?pageId=" + $RequestData["GetLangs"][0]
 		$url += "&host=www.microsoft.com"
-		$url += "&segments=software-download," + $WindowsVersions[$SelectedVersion][0][1] 
+		$url += "&segments=software-download," + $WindowsVersions[$SelectedVersion][0][1]
 		$url += "&query=&action=" + $RequestData["GetLangs"][1]
 		$url += "&sessionId=" + $SessionId
 		$url += "&productEditionId=" + [Math]::Abs($SelectedEdition)
@@ -693,7 +693,7 @@ function Get-Windows-Download-Links([int]$SelectedVersion, [int]$SelectedEdition
 		$url = "https://www.microsoft.com/" + $QueryLocale + "/api/controls/contentinclude/html"
 		$url += "?pageId=" + $RequestData["GetLinks"][0]
 		$url += "&host=www.microsoft.com"
-		$url += "&segments=software-download," + $WindowsVersions[$SelectedVersion][0][1] 
+		$url += "&segments=software-download," + $WindowsVersions[$SelectedVersion][0][1]
 		$url += "&query=&action=" + $RequestData["GetLinks"][1]
 		$url += "&sessionId=" + $SessionId
 		$url += "&skuId=" + $SkuId
@@ -752,7 +752,7 @@ function Process-Download-Link([string]$Url)
 		} else {
 			if ($Cmd) {
 				$pattern = '.*\/(.*\.iso).*'
-				$File = [regex]::Match($Url, $pattern).Groups[1].Value	
+				$File = [regex]::Match($Url, $pattern).Groups[1].Value
 				$Size = Size-To-Human-Readable (Invoke-WebRequest -UseBasicParsing -Uri $Url -Method Head).Headers.'Content-Length'
 				Write-Host "Downloading '$File' ($Size)..."
 				Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $File
@@ -912,7 +912,7 @@ if ($Cmd) {
 
 	# Arch selection => Return selected download link
 	if ($GetUrl) {
-		Write-Host $winLink.Link
+		Return $winLink.Link
 		$ExitCode = 0
 	} else {
 		Write-Host "Selected: $Selected"
