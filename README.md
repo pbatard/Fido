@@ -50,10 +50,9 @@ redirect you __away__ from the pages that allow you to download retail ISOs):
 * https://www.microsoft.com/software-download/Windows8ISO
 * https://www.microsoft.com/software-download/Windows10ISO
 
-After visiting those with a full browser (Internet Explorer, running through the `Invoke-WebRequest` PowerShell Cmdlet),
-to confirm that they are accessible, the script then queries the web API from the Microsoft servers to first request the
-language selection available for the version of Windows selected by the user, and then request the actual download links
-for all the architectures available for that specific combination of version + language.
+After checking access to these URLs, to confirm that they are accessible, the script first queries the web API from the
+Microsoft servers, to request the language selection available for the version of Windows selected, and then requests
+the actual download links for all the architectures available for that language + version.
 
 Requirements
 ------------
