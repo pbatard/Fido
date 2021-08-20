@@ -722,13 +722,39 @@ function Get-Windows-Download-Links([int]$SelectedVersion, [int]$SelectedEdition
 			$html = $html.Replace("IsoX64", "&quot;x64&quot;")
 			$html = "<inputs>" + $html + "</inputs>"
 			$xml = [xml]$html
+
+			# Build a hashtable out of all ISO hashes in response
+			$hashPattern = '(?s)(<td>.*?</td>)'
+			$hashesHashtable = @{}
+			ForEach-Object { [regex]::Matches($r, $hashPattern) } | ForEach-Object -End $Null -Begin { $index = 0; $key=''; } -Process {
+				$value = $_.Groups[1].Value -replace '<td>', ''
+				$value = $value -replace '</td>', ''
+
+				# If index is even number, it's a key (language and arch), if odd, it's the hash for the corresponding ISO
+				If ($index % 2 -eq 0) {
+					$key = $value
+				} Else {
+					$hashesHashtable.Add($key, $value)
+				}
+				$index++
+			}
+
 			foreach ($var in $xml.inputs.input) {
 				$json = $var.value | ConvertFrom-Json;
 				if ($json) {
+					$json | ForEach-Object {
+						If ($_.DownloadType -eq 'x64') {
+							$isoArchType = '64-bit'
+						} Else {
+							$isoArchType = '32-bit'
+						}
+
+						$_ | Add-Member -NotePropertyName 'FileHash' -NotePropertyValue $hashesHashtable["$($_.Language)  $isoArchType"]
+					}
 					if (($Is64 -and $json.DownloadType -eq "x64") -or (-not $Is64 -and $json.DownloadType -eq "x86")) {
 						$script:SelectedIndex = $i
 					}
-					$links += @(New-Object PsObject -Property @{ Type = $json.DownloadType; Link = $json.Uri })
+					$links += @(New-Object PsObject -Property @{ Type = $json.DownloadType; Link = $json.Uri; FileHash = $json.FileHash })
 					$i++
 				}
 			}
@@ -912,7 +938,7 @@ if ($Cmd) {
 
 	# Arch selection => Return selected download link
 	if ($GetUrl) {
-		Return $winLink.Link
+		Return $winLink
 		$ExitCode = 0
 	} else {
 		Write-Host "Selected: $Selected"
