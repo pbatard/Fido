@@ -140,6 +140,12 @@ $WindowsVersions = @(
 			@("Windows 10 Home China ", ($zh + 1215))
 		),
 		@(
+			"1809 R3 (Build 17763.379 - 2019.03)",
+			@("Windows 10 Home/Pro", 1203),
+			@("Windows 10 Education", 1202),
+			@("Windows 10 Home China ", ($zh + 1204))
+		),
+		@(
 			"1809 R2 (Build 17763.107 - 2018.10)",
 			@("Windows 10 Home/Pro", 1060),
 			@("Windows 10 Education", 1056),
