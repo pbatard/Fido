@@ -47,8 +47,7 @@ is, provided that you have also changed your `User-Agent` browser string, since,
 version of Windows that is the same as the one you are trying to download, the Microsoft web servers at these addresses
 redirect you __away__ from the pages that allow you to download retail ISOs):
 
-* https://www.microsoft.com/software-download/Windows8ISO
-* https://www.microsoft.com/software-download/Windows10ISO
+https://www.microsoft.com/en-us/software-download
 
 After checking access to these URLs, to confirm that they are accessible, the script first queries the web API from the
 Microsoft servers, to request the language selection available for the version of Windows selected, and then requests
