@@ -21,7 +21,7 @@ sign_file() {
 }
 
 # Update the Authenticode signature
-cmd.exe /c '"C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64\signtool" sign /v /sha1 9ce9a71ccab3b38a74781b975f1c228222cf7d3b /fd SHA256 /tr http://sha256timestamp.ws.symantec.com/sha256/timestamp Fido.ps1'
+cmd.exe /c '"C:\Program Files (x86)\Windows Kits\10\bin\10.0.22000.0\x64\signtool" sign /v /sha1 9ce9a71ccab3b38a74781b975f1c228222cf7d3b /fd SHA256 /tr http://sha256timestamp.ws.symantec.com/sha256/timestamp /td SHA256 Fido.ps1'
 read -s -p "Enter pass phrase for `realpath $PRIVATE_KEY`: " PASSWORD
 echo
 # Confirm that the pass phrase is valid by trying to sign a dummy file

@@ -1,5 +1,5 @@
-Fido: Full ISO Download Script (for Windows retail ISOs)
-========================================================
+Fido: A PowerShell download script for Windows ISOs and UEFI Shell
+==================================================================
 
 [![Licence](https://img.shields.io/badge/license-GPLv3-blue.svg?style=flat-square)](https://www.gnu.org/licenses/gpl-3.0.en.html)
 [![Github stats](https://img.shields.io/github/downloads/pbatard/Fido/total.svg?style=flat-square)](https://github.com/pbatard/Fido/releases)
@@ -9,7 +9,7 @@ Description
 
 Fido is a PowerShell script that is primarily designed to be used in [Rufus](https://github.com/pbatard/rufus), but that
 can also be used in standalone fashion, and whose purpose is to automate access to the official Microsoft Windows retail
-ISO download links.
+ISO download links as well as provide convenient access to bootable UEFI Shell images.
 
 This script exists because, while Microsoft does make retail ISO download links freely and publicly available (at least
 for Windows 8 and Windows 10), it only does so after actively forcing users to jump through a lot of unwarranted hoops,
@@ -47,13 +47,11 @@ is, provided that you have also changed your `User-Agent` browser string, since,
 version of Windows that is the same as the one you are trying to download, the Microsoft web servers at these addresses
 redirect you __away__ from the pages that allow you to download retail ISOs):
 
-* https://www.microsoft.com/software-download/Windows8ISO
-* https://www.microsoft.com/software-download/Windows10ISO
+https://www.microsoft.com/en-us/software-download
 
-After visiting those with a full browser (Internet Explorer, running through the `Invoke-WebRequest` PowerShell Cmdlet),
-to confirm that they are accessible, the script then queries the web API from the Microsoft servers to first request the
-language selection available for the version of Windows selected by the user, and then request the actual download links
-for all the architectures available for that specific combination of version + language.
+After checking access to these URLs, to confirm that they are accessible, the script first queries the web API from the
+Microsoft servers, to request the language selection available for the version of Windows selected, and then requests
+the actual download links for all the architectures available for that language + version.
 
 Requirements
 ------------
