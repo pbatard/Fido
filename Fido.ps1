@@ -1,5 +1,5 @@
 ﻿#
-# Fido v1.30 - Feature ISO Downloader, for retail Windows images and UEFI Shell
+# Fido v1.31 - Feature ISO Downloader, for retail Windows images and UEFI Shell
 # Copyright © 2019-2022 Pete Batard <pete@akeo.ie>
 # Command line support: Copyright © 2021 flx5
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
@@ -48,14 +48,6 @@ param(
 	[switch]$Verbose = $False
 )
 #endregion
-
-# 2022-08-12: This script is currently not operational for Windows ISOs since Microsoft
-# altered their website in a manner that is hostile to our queries.
-# Please see https://github.com/pbatard/Fido/issues/41 for details.
-# If you think you can help, set the following variable to $False and try your best! ;)
-$Disable_Windows_ISOs = $True
-$Disable_Windows_Msg  = "Download of Windows ISOs is no longer available due to Microsoft having altered their website to prevent it.  :(`r`n`r`n" `
-	+ "If you think you can help, please see:`r`nhttps://github.com/pbatard/Fido/issues/41"
 
 try {
 	[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -801,8 +793,9 @@ function Get-Windows-Download-Links([int]$SelectedVersion, [int]$SelectedRelease
 
 		try {
 			$Is64 = [Environment]::Is64BitOperatingSystem
-			$r = Invoke-WebRequest -Method Post -UseBasicParsing -UserAgent $UserAgent -WebSession $Session $url
-#			Write-Host $r
+			# Must add a referer for POST requests, else Microsoft's servers will deny them
+			$ref = "https://www.microsoft.com/software-download/windows11"
+			$r = Invoke-WebRequest -Method Post -Headers @{"Referer" = $ref} -UseBasicParsing -UserAgent $UserAgent -WebSession $Session $url
 			if ($r -match "errorModalMessage") {
 				Throw-Error -Req $r -Alt "Could not retrieve architectures from server"
 			}
@@ -893,11 +886,6 @@ if ($Cmd) {
 			Write-Host "Invalid Windows version provided."
 			Write-Host "Use '-Win List' for a list of available Windows versions."
 		}
-		exit 1
-	}
-
-	if ($Disable_Windows_ISOs -and $winVersionId -lt 3) {
-		Write-Host $Disable_Windows_Msg
 		exit 1
 	}
 
@@ -1066,14 +1054,7 @@ $Continue.add_click({
 			$XMLForm.Title = Get-Translation($English[12])
 			Refresh-Control($XMLForm)
 			if ($WindowsVersion.SelectedValue.Version.StartsWith("Windows") -and $WindowsVersion.SelectedValue.Version -ne "Windows 7") {
-				if ($Disable_Windows_ISOs) {
-					Error($Disable_Windows_Msg)
-					$script:ExitCode = 1
-					$XMLForm.Close()
-					break;
-				} else {
-					Check-Locale
-				}
+				Check-Locale
 			}
 			$releases = Get-Windows-Releases $WindowsVersion.SelectedValue.Index
 			$script:WindowsRelease = Add-Entry $Stage "Release" $releases
@@ -1177,8 +1158,8 @@ exit $ExitCode
 # SIG # Begin signature block
 # MIIkWAYJKoZIhvcNAQcCoIIkSTCCJEUCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBIbXdlyM4YkMuO
-# 1TiheNA9UI6/439UbwfpoVydyjKG6qCCElkwggVvMIIEV6ADAgECAhBI/JO0YFWU
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAiZT+pEprxewVE
+# +Vpi/MqR7ClFwopa4p2nE7rw5/vvS6CCElkwggVvMIIEV6ADAgECAhBI/JO0YFWU
 # jTanyYqJ1pQWMA0GCSqGSIb3DQEBDAUAMHsxCzAJBgNVBAYTAkdCMRswGQYDVQQI
 # DBJHcmVhdGVyIE1hbmNoZXN0ZXIxEDAOBgNVBAcMB1NhbGZvcmQxGjAYBgNVBAoM
 # EUNvbW9kbyBDQSBMaW1pdGVkMSEwHwYDVQQDDBhBQUEgQ2VydGlmaWNhdGUgU2Vy
@@ -1281,22 +1262,22 @@ exit $ExitCode
 # aWMgQ29kZSBTaWduaW5nIENBIEVWIFIzNgIRAL+xUAG79ZLUlip3l+pzb6MwDQYJ
 # YIZIAWUDBAIBBQCgfDAQBgorBgEEAYI3AgEMMQIwADAZBgkqhkiG9w0BCQMxDAYK
 # KwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkqhkiG
-# 9w0BCQQxIgQguJWcBhhTXKqrgsvi+2Ej/MyEHAwuocYCOMIyjaWspmkwDQYJKoZI
-# hvcNAQEBBQAEggIAn5afVKipUOYO2SSmLNI6VJe0LWsVIgo6Pq3WjXiPUTSvYEuE
-# IXX9nYo00MfJUOWKsqbX4/VcSsoyhWtwMiJsWp5MNK/U243LivyLeyEYGjrheB+o
-# 8Cdu2nyU5n91cpVtUIlz8Rpdanj6mnjkFzekumuCqEyiPuIUSjMrq3m8nd6+3Jyl
-# P/waSI1TEQqBiGa/N1xrdR0Oji0VKwhUuotCbjS0vwS1ielKrf70+7dDaU0BtoaD
-# sQph3SIlnjWxBJnOtRSvdCsuVnFMGpuHzkKVzdbFH81NIOLNTkRJqvPfE/h/s0mI
-# 4J50zpC16cqo2C1YdffhCuoKuaGau14zb7krjIP2+C/JXKWNcgHB3FhRrT8ZdAz7
-# qjJRpLqVr42dFsskGzhUli/nKVBZGxnNZa5L3U8n1k3Kgzj3iPE/B4R4UxGxAjYp
-# tZMPWrvyBW9RXAhO0QqL6nPHeifXcUt184Isis2gIZ0akxeEgl9muADVxk8gpEvm
-# 1ZuRkmLhPPK0VjqUDhswpPZKQTYWNkFyikeWclJo493D6TUF4PS/yldauhPz2CNA
-# AtTSAD7Vjay1MFTPdsq0Q5uOF09YJw1sm1vdMDz0mtUG3+5HQWY3HAAYd9+jGAw1
-# w2HQMTkzf5YWBMIUI7MFrOHbgYJ1hr5T7onR10hDeyfP6IwTwnk34xJKg2ehgg48
+# 9w0BCQQxIgQg4dhURk9h2CUZOUvA++UydKpA1JdF0+LNfeUwXIsUntYwDQYJKoZI
+# hvcNAQEBBQAEggIAFd7shJs09KEtSAd3zed3GhVeYlyPkyE7cEPHqMgqYzmEICoU
+# mMvTtcHJMJ0QwGBHwSzqtAfXSzeLBjgHNSGjAKcFgDesQc3Af8Q09fRpw9C8sNGk
+# 93YtSymh9j0GzulCxUZrIR1F5sWqCIk0hci82UC2OZv6PMUU/rcGlqJHa2LxuRu4
+# qarqbEI+9IiTQxgJf0OU7j5QeqrA+2HsRezxF9FHZGPKCrbiB1jpxgj4KSN8VZXK
+# h8Dek4RTkdzoGz57Euib6fLbeGhz0JTUmfV/ntH8vLyXE7jLnFF4TkOZqz4lxS/O
+# 1XGyNy7JIcXGulJIApiWjUDlTf25iAmZgnsSE/bX9BaU/785/bbFdcM0TPMQdsfT
+# kRWWDGGAiOCGE1iqodmXGItdltJqwm20WOL8Gdp0SatXgeE+VUS5okaj5Pka0hF7
+# JDSECigbdr85wMBzWOtxJwF/QfhfswrpdgNCWPgnm0UNXXGRHo+xMeKLW3W9PmqE
+# ApXLuwmwQlqd0MB9do6Ej9FR0VfF8lgbewrviUSrxNcQprjS4Bz10khnXa4MXbaD
+# I9fO3qcZbf5l2WWZugcJ6ViUPGPy6l5uhFfeqFHNydfpCxNhvIHp9DOL4DeQYm7Q
+# aujoBd8SgE3PvAmGgrYl+XD3bHUfazweFfXIFmIfLAQuh2Ckxhwxkk9+FQ6hgg48
 # MIIOOAYKKwYBBAGCNwMDATGCDigwgg4kBgkqhkiG9w0BBwKggg4VMIIOEQIBAzEN
 # MAsGCWCGSAFlAwQCATCCAQ4GCyqGSIb3DQEJEAEEoIH+BIH7MIH4AgEBBgtghkgB
-# hvhFAQcXAzAxMA0GCWCGSAFlAwQCAQUABCCHsu/kPJA6jCWY6SR0cf9/bIvu1Raq
-# a/ro2lHM75R5uwIUWhRNqizOEmPWsWhFjbgAj0WOUfEYDzIwMjIwODEyMTI1MzU1
+# hvhFAQcXAzAxMA0GCWCGSAFlAwQCAQUABCB+P2yrx7cKWTvcCTruQVFWqpmcXwUz
+# XmhaQNlqAtrkMQIUf2BkE0IGM0tE5oax6k7lml9bJDoYDzIwMjIwODEzMTQwODA1
 # WjADAgEeoIGGpIGDMIGAMQswCQYDVQQGEwJVUzEdMBsGA1UEChMUU3ltYW50ZWMg
 # Q29ycG9yYXRpb24xHzAdBgNVBAsTFlN5bWFudGVjIFRydXN0IE5ldHdvcmsxMTAv
 # BgNVBAMTKFN5bWFudGVjIFNIQTI1NiBUaW1lU3RhbXBpbmcgU2lnbmVyIC0gRzOg
@@ -1360,13 +1341,13 @@ exit $ExitCode
 # A1UEChMUU3ltYW50ZWMgQ29ycG9yYXRpb24xHzAdBgNVBAsTFlN5bWFudGVjIFRy
 # dXN0IE5ldHdvcmsxKDAmBgNVBAMTH1N5bWFudGVjIFNIQTI1NiBUaW1lU3RhbXBp
 # bmcgQ0ECEHvU5a+6zAc/oQEjBCJBTRIwCwYJYIZIAWUDBAIBoIGkMBoGCSqGSIb3
-# DQEJAzENBgsqhkiG9w0BCRABBDAcBgkqhkiG9w0BCQUxDxcNMjIwODEyMTI1MzU1
-# WjAvBgkqhkiG9w0BCQQxIgQgmzPI3dPmxkbxDPwMgM+VdkDAogPDPZmNxy7JOZnY
-# EVIwNwYLKoZIhvcNAQkQAi8xKDAmMCQwIgQgxHTOdgB9AjlODaXk3nwUxoD54oIB
-# PP72U+9dtx/fYfgwCwYJKoZIhvcNAQEBBIIBAIaXBlnLrDyXs8oAxEeCiV2Hg1Rd
-# 8id7aHZ3RiD00JydnXWlGs5Rrn+FPDSl8U3g+U4BUt6I6BN8LnQ/94hSAiMwaGCq
-# xJAb7gkFhyEYCUWjWypWQFO9A8yGa59m+MQvhingC+Ikdx5IEAYClzaGd4pd/J3B
-# IMCrnjp8OYbfy1CeZa+K7TYQZiFRghwIYvNSFxL5/5jOu0m8qDCyDvsiSelid70m
-# F6fTrpXG524iNCihpg+0J0zLUkguR5ug75ra4CTJMwhjuDQyJkcaW4BtrR9xLkNb
-# 6eynKUz24MTW+A9Q32gYjBHiM0uf/fDzWaX8tcVSr712MAMKt7haMJcRNmg=
+# DQEJAzENBgsqhkiG9w0BCRABBDAcBgkqhkiG9w0BCQUxDxcNMjIwODEzMTQwODA1
+# WjAvBgkqhkiG9w0BCQQxIgQgyzbGNEm17ASxjBAH4HbnUZ3Ej87pVzNjol1uN8+H
+# c8EwNwYLKoZIhvcNAQkQAi8xKDAmMCQwIgQgxHTOdgB9AjlODaXk3nwUxoD54oIB
+# PP72U+9dtx/fYfgwCwYJKoZIhvcNAQEBBIIBAGSG7BMFr8SAjmFSZlHc+OotF88R
+# eqD8KR5JpDeI+PibBbDKqakppSIAZiFpehkXM/FI9PZxoJ5FxsQXT5gMlYHpEyCY
+# tC5uGLxrYodpgAbTMoxCvfn3HpgQr7rTec/pyiRSrqgOX3eKbKo2IQA8t7T8QO9o
+# JNTGrQsXrURqKI1O8uBEdoqg85Pj0YbJkR3zwBs1kHKB7XixUHAPP75NpuBWRzpR
+# Ivx+mqun1nYau9MT5bZG0oXb8U103KvHv0odFcLwhSJjvhj+73kxjPbxY3ays3mR
+# 64hcdC5EuagKt5hlBk+CveTvAW33MEuXSSFVgQ/PZVPt1iQ1WVZtPMY81BY=
 # SIG # End signature block
