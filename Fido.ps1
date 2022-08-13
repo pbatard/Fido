@@ -801,7 +801,7 @@ function Get-Windows-Download-Links([int]$SelectedVersion, [int]$SelectedRelease
 
 		try {
 			$Is64 = [Environment]::Is64BitOperatingSystem
-			$r = Invoke-WebRequest -Method Post -UseBasicParsing -UserAgent $UserAgent -WebSession $Session $url
+			$r = Invoke-WebRequest -Method Post -Headers @{'Referer' = 'https://www.microsoft.com/software-download/windows11'} -UseBasicParsing -UserAgent $UserAgent -WebSession $Session $url
 #			Write-Host $r
 			if ($r -match "errorModalMessage") {
 				Throw-Error -Req $r -Alt "Could not retrieve architectures from server"
