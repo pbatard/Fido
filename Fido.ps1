@@ -1,5 +1,5 @@
 ﻿#
-# Fido v1.32 - Feature ISO Downloader, for retail Windows images and UEFI Shell
+# Fido v1.33 - Feature ISO Downloader, for retail Windows images and UEFI Shell
 # Copyright © 2019-2022 Pete Batard <pete@akeo.ie>
 # Command line support: Copyright © 2021 flx5
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
@@ -98,7 +98,7 @@ $WindowsVersions = @(
 	@(
 		@("Windows 11", "windows11"),
 		@(
-			"22H2 (Build 22621.521 - 2022.09)",
+			"22H2 (Build 22621.382 - 2022.09)",
 			@("Windows 11 Home/Pro/Edu", 2360),
 			@("Windows 11 Home China ", ($zh + 2361))
 		),
@@ -800,7 +800,16 @@ function Get-Windows-Download-Links([int]$SelectedVersion, [int]$SelectedRelease
 			$Is64 = [Environment]::Is64BitOperatingSystem
 			# Must add a referer for POST requests, else Microsoft's servers will deny them
 			$ref = "https://www.microsoft.com/software-download/windows11"
-			$r = Invoke-WebRequest -Method Post -Headers @{"Referer" = $ref} -UseBasicParsing -UserAgent $UserAgent -WebSession $Session $url
+			$wr = [System.Net.WebRequest]::Create($url)
+			# Windows 7 PowerShell doesn't support 'Invoke-WebRequest -Headers @{"Referer" = $ref}'
+			# (produces "The 'Referer' header must be modified using the appropriate property or method")
+			# so we use StreamReader() with GetResponseStream() and do this whole gymkhana instead...
+			$wr.Method = "POST"
+			$wr.Referer = $ref
+			$wr.UserAgent = $UserAgent
+			$wr.ContentLength = 0
+			$sr = New-Object System.IO.StreamReader($wr.GetResponse().GetResponseStream())
+			$r = $sr.ReadToEnd()
 			if ($r -match "errorModalMessage") {
 				Throw-Error -Req $r -Alt "Could not retrieve architectures from server"
 			}
@@ -1163,8 +1172,8 @@ exit $ExitCode
 # SIG # Begin signature block
 # MIIkWQYJKoZIhvcNAQcCoIIkSjCCJEYCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCD6h5jkGuLA4flo
-# AEOvdhqzbH5KP4Nh/95HnUq3WD2RxKCCElkwggVvMIIEV6ADAgECAhBI/JO0YFWU
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDUeFzYLyGc6jXF
+# dBz+FBcylnkilIubS5cDHWoqJHxaM6CCElkwggVvMIIEV6ADAgECAhBI/JO0YFWU
 # jTanyYqJ1pQWMA0GCSqGSIb3DQEBDAUAMHsxCzAJBgNVBAYTAkdCMRswGQYDVQQI
 # DBJHcmVhdGVyIE1hbmNoZXN0ZXIxEDAOBgNVBAcMB1NhbGZvcmQxGjAYBgNVBAoM
 # EUNvbW9kbyBDQSBMaW1pdGVkMSEwHwYDVQQDDBhBQUEgQ2VydGlmaWNhdGUgU2Vy
@@ -1267,23 +1276,23 @@ exit $ExitCode
 # aWMgQ29kZSBTaWduaW5nIENBIEVWIFIzNgIRAL+xUAG79ZLUlip3l+pzb6MwDQYJ
 # YIZIAWUDBAIBBQCgfDAQBgorBgEEAYI3AgEMMQIwADAZBgkqhkiG9w0BCQMxDAYK
 # KwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkqhkiG
-# 9w0BCQQxIgQgYNJ1tAjux5cSXZGUyaCHzKMqd3wSI6IPP6QRgfqH7ZcwDQYJKoZI
-# hvcNAQEBBQAEggIAC77UeQjlf3wPGfBs449r/Fd86SGJTkIhncW5qierUDv7jCzG
-# 41Z+GHaDoDqyuha2ciiMy41YyEOXsxAQ3jvN0AUk3lhFrw1vpxRgljp3Gqix92QW
-# gwweiJIf7Wk25F0AIQRxTrYcUeHQTglaAJ9pWsnRDkrBNMmEWF13dYzwLEh27WYn
-# R+tGNGysWWincXwjiB4siSvYc8UOkWci/scK1xP8OYPrHSkA4dkgPtdE5C4h0hU2
-# 7stnpOtb0ghRLSoEBSASfTD1827GAV2/tWZ0imnluEtK6AW8mNDO6Y8Y1hqfsYl6
-# DapPzvFAE/AqvMEnLRF2GnYAChTsFj2dhlNk7bRGqdTU5Y68VYjolNTEcuXJ7cAD
-# RVXUvA/kcaF03cm14h0uBC1H5r4uKV5qp0QX3442yze8xwLsoEJncS+lzgOzMpsf
-# sFND0eShfTDbS9o5xZqunafY1NZOzu3zd6zh+YssOA8JCkPxdFGDzCSv0FUjM9bE
-# +ieZptkB5ENhva07fajhKdY/HVUOxEGUFUuWz0oiPGtCtcsTLT/LIda/xxmM4iFe
-# w8eqmuDJFNGtRWhJrd5JjU5CVhMUHvlrC/sA+QqkFvE7uQ1AkwmXocY8vbGR4H2V
-# wnlccMmGuBkYniuhYFdikRwS/hXT/YOr3tsb1Upnkze/udz8rGsHOMUKt9ehgg49
+# 9w0BCQQxIgQg4UMUZV9lRQzMprUkABF0BlPniTPJlUMtr+dcV+8/NxMwDQYJKoZI
+# hvcNAQEBBQAEggIAEFuVP/hg/nQQ28s0nUKy36g+a1QFfQ/WY1IyP90JIZ/1+oO1
+# 5Aid5+FpJKhjb/E8mXO+/ntoSwbKSq+0lBPTTmI/RFT755VZvh/DupxXaz2+pVZ5
+# 1t818dt7jq1GqqWIXEJSUwyoYe5PXrC2G9HWr2umRG+p+yo+6j13etJLYL28TScA
+# UgJt1sZdAcQ176c3zqVEAzs26AmVpmA47he0d8vLVD4X/HmGLf/eisAjedNe9sN5
+# U2jecv09DdD3MZ8NEK01vDhpgd8M68oq6o1/5aB+EW2YwXQFcuQbbp4jcAtWDvTW
+# xRG8znfZ6sZe0vmxkNImBSynON52ficdSqp/UYH6E655bLniO6AhLPGG16suDGM/
+# DqG05IoVKsBqKtOJT1E08ShODjLt3or6x6XVn5WWbafnjB5NjBN9xZKPxR2gxE8H
+# KzMvLhrT29SDpgXb1lQZ1364yRiFi6Ocv9VC53oOg3LuFUjThdFr+kFp+GyAzG3S
+# 1PivyLVsxn4AYKNPawth1wYCVDxTY9D2nk6UsAxGrV6bD6SDnIUQTYj0u+dMZYjn
+# zHjhqE8jAVcXARG3tixRyRo0GuOHgo7gAoNdwSV/qncmHVSayu42aMo0uq/m/uBG
+# Un5TtSo2cxkiA/R+t0AQfkFycxh7xRsrZQEbpdINvd2uPzpSulWCQ44dJO6hgg49
 # MIIOOQYKKwYBBAGCNwMDATGCDikwgg4lBgkqhkiG9w0BBwKggg4WMIIOEgIBAzEN
 # MAsGCWCGSAFlAwQCATCCAQ8GCyqGSIb3DQEJEAEEoIH/BIH8MIH5AgEBBgtghkgB
-# hvhFAQcXAzAxMA0GCWCGSAFlAwQCAQUABCA14LAXm88+tZ3FC2cVxGuBtbMKzk6a
-# NCjj3OgaseaZvgIVAIhD9ElHH5Y3yqMokr9xGzeLKkwSGA8yMDIyMDkyMDIxNTcw
-# OFowAwIBHqCBhqSBgzCBgDELMAkGA1UEBhMCVVMxHTAbBgNVBAoTFFN5bWFudGVj
+# hvhFAQcXAzAxMA0GCWCGSAFlAwQCAQUABCAF0PPeYlamcvCFCNrLf6a2MOaNAL7G
+# S1d7gX3YVhCWkgIVAMWb0uP+c1wcM05ZVfs1BbLIPXFTGA8yMDIyMDkyMTE1NTY0
+# MVowAwIBHqCBhqSBgzCBgDELMAkGA1UEBhMCVVMxHTAbBgNVBAoTFFN5bWFudGVj
 # IENvcnBvcmF0aW9uMR8wHQYDVQQLExZTeW1hbnRlYyBUcnVzdCBOZXR3b3JrMTEw
 # LwYDVQQDEyhTeW1hbnRlYyBTSEEyNTYgVGltZVN0YW1waW5nIFNpZ25lciAtIEcz
 # oIIKizCCBTgwggQgoAMCAQICEHsFsdRJaFFE98mJ0pwZnRIwDQYJKoZIhvcNAQEL
@@ -1346,13 +1355,13 @@ exit $ExitCode
 # BgNVBAoTFFN5bWFudGVjIENvcnBvcmF0aW9uMR8wHQYDVQQLExZTeW1hbnRlYyBU
 # cnVzdCBOZXR3b3JrMSgwJgYDVQQDEx9TeW1hbnRlYyBTSEEyNTYgVGltZVN0YW1w
 # aW5nIENBAhB71OWvuswHP6EBIwQiQU0SMAsGCWCGSAFlAwQCAaCBpDAaBgkqhkiG
-# 9w0BCQMxDQYLKoZIhvcNAQkQAQQwHAYJKoZIhvcNAQkFMQ8XDTIyMDkyMDIxNTcw
-# OFowLwYJKoZIhvcNAQkEMSIEICcu8Fuw/1HxTul0vtNyaZO+8LZLFsCph/n2wPti
-# mtGwMDcGCyqGSIb3DQEJEAIvMSgwJjAkMCIEIMR0znYAfQI5Tg2l5N58FMaA+eKC
-# ATz+9lPvXbcf32H4MAsGCSqGSIb3DQEBAQSCAQB5LyfB7M+z9j4uVqZ76ibc5DuL
-# SGPIqu9Uakos5Mbg7IMAYt1MrnCzqQw00eqa87HCfa48UJz4npEjeo9wo+iHFf+S
-# fLXDzzJ1UK6d8o0ESEQI6/HKi/CQ052Ikt2q0gbhsvp3tb2OlLDu5hWz0+yIf+ru
-# rP/lGpjwRImXpTdlQEfZ9nxOj+pEowaV7KyS/ukMOWygQn8pS42McNW2JV1WXAPT
-# MJ+bLdHy7W9jQIK8xZ6yqS7H9YYKRvCNz28zYBWrRl+Lgr5vsM+WJ6+1042pnd4G
-# 5NiyWHvp4kd5EiuKAIyc+8kb4yGATNf08utpKxNQ/0e58ibNaChRS3UyI/fO
+# 9w0BCQMxDQYLKoZIhvcNAQkQAQQwHAYJKoZIhvcNAQkFMQ8XDTIyMDkyMTE1NTY0
+# MVowLwYJKoZIhvcNAQkEMSIEILvZi3muWrod7K9kHyk/WE6ivgHJtSCXjde+vv8Z
+# WiczMDcGCyqGSIb3DQEJEAIvMSgwJjAkMCIEIMR0znYAfQI5Tg2l5N58FMaA+eKC
+# ATz+9lPvXbcf32H4MAsGCSqGSIb3DQEBAQSCAQCmIEtfCe7GnEezhZmxNvjQG68a
+# z9Ve9nQbbwqf+q4nHnkBo2GC0Yy/DxnX4guloxGcw/9DVwxzzC7ItJEG0qmAY0Pl
+# bdDVLyldAwZYcY43LriCS80x5xLZQjkpPSQurs3uTcGbwkqno20XZdRMSvUYdI0K
+# how//ZKXn9XcQGcvaCIGCzttS433m3khkILUiVvZNOqGERX6BqNjX5OX4QscK1uR
+# kRKEPdL9WMIv3MX902bnnC8OqeuHcKcjdIuokzGfDYoGJe8aGOWTsScivdft+5Go
+# C1W4KLv7+jEF0n05S0Sd/ebBFYM4Zq2EQVpj1KeLyrPHonZYwZGzbXpwRC3W
 # SIG # End signature block
