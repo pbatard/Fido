@@ -865,6 +865,7 @@ function Process-Download-Link([string]$Url)
 				$tmp_size = [uint64]::Parse($str_size)
 				$Size = Size-To-Human-Readable $tmp_size
 				Write-Host "Downloading '$File' ($Size)..."
+				$ProgressPreference = 'SilentlyContinue'
 				Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $File
 			} else {
 				Write-Host Download Link: $Url
