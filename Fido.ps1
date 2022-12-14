@@ -1,5 +1,5 @@
 ﻿#
-# Fido v1.36 - Feature ISO Downloader, for retail Windows images and UEFI Shell
+# Fido v1.37 - Feature ISO Downloader, for retail Windows images and UEFI Shell
 # Copyright © 2019-2022 Pete Batard <pete@akeo.ie>
 # Command line support: Copyright © 2021 flx5
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
@@ -45,7 +45,9 @@ param(
 	# (Optional) Only display the download URL [Toggles commandline mode]
 	[switch]$GetUrl = $False,
 	# (Optional) Increase verbosity
-	[switch]$Verbose = $False
+	[switch]$Verbose = $False,
+	# (Optional) Disable the progress bar
+	[switch]$DisableProgress = $False
 )
 #endregion
 
@@ -865,6 +867,9 @@ function Process-Download-Link([string]$Url)
 				$tmp_size = [uint64]::Parse($str_size)
 				$Size = Size-To-Human-Readable $tmp_size
 				Write-Host "Downloading '$File' ($Size)..."
+				if ($DisableProgress) {
+					$ProgressPreference = 'SilentlyContinue'
+				}
 				Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $File
 			} else {
 				Write-Host Download Link: $Url
@@ -1182,8 +1187,8 @@ exit $ExitCode
 # SIG # Begin signature block
 # MIIkWAYJKoZIhvcNAQcCoIIkSTCCJEUCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCD3r+IHO63uGYzY
-# xGzyiRWG3Q7i6i7OtFjMJ/eUB6Vbp6CCElkwggVvMIIEV6ADAgECAhBI/JO0YFWU
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBvkradY00oHD7U
+# jI30T9lryKRiuLKIqb6m5dIPhfHLmKCCElkwggVvMIIEV6ADAgECAhBI/JO0YFWU
 # jTanyYqJ1pQWMA0GCSqGSIb3DQEBDAUAMHsxCzAJBgNVBAYTAkdCMRswGQYDVQQI
 # DBJHcmVhdGVyIE1hbmNoZXN0ZXIxEDAOBgNVBAcMB1NhbGZvcmQxGjAYBgNVBAoM
 # EUNvbW9kbyBDQSBMaW1pdGVkMSEwHwYDVQQDDBhBQUEgQ2VydGlmaWNhdGUgU2Vy
@@ -1286,22 +1291,22 @@ exit $ExitCode
 # aWMgQ29kZSBTaWduaW5nIENBIEVWIFIzNgIRAL+xUAG79ZLUlip3l+pzb6MwDQYJ
 # YIZIAWUDBAIBBQCgfDAQBgorBgEEAYI3AgEMMQIwADAZBgkqhkiG9w0BCQMxDAYK
 # KwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkqhkiG
-# 9w0BCQQxIgQghWXKfLagQekBkcnubkmfqQ61iCaiInIyD57N1yJhv70wDQYJKoZI
-# hvcNAQEBBQAEggIApHNieZoTHnaLqibqC4O19beTcv9MPVrWW9He+v9Jrj3eM7wY
-# aUIweDSI3V3brPRFSyYjmvkiGcXQHcs/ooPNjT07KlDGvZYxXFGNHJlkSPKSNVgc
-# 0TKgsdP4xypZQipg3BTSmmGvbQYN/+v3ckVwL+R99syOQ4rf16RD7XkoQib4KFK8
-# yr198WGH2cYM7D2wRTZPOn1XCEFTmi7qM+Wxh/DiZBpvjj04cOGdFwT/bLotBdDs
-# EP6uMK2oVZ3iOua/sW3y+Gh5+gPNB4lUf6i74rq7dL2e5xriu7uRzfwpuiiFJNpm
-# TU+ZTsC58kH3srJlbqY3StdGtjPnhur4iB1FQfNglxikwjm/hL3MtWZL0Z53amzF
-# +YOrJcNlFTTr8TqxjqayYot3bG+moXX1DS2R5jc8KRkTacH9GzG2wy+uWC6qCXtl
-# 3CcVhf7SofNF6vWUSZBzlPDofiDtib6rMx2DzU7gmm8kyPjAAiu4Lwv89PGvIBxW
-# p7a5wXsFupaFNLolPbXBsoalwYu5q2zYi3B4Wxc2ScALcBXZIEt8ZLfl6SJuE1JQ
-# 26kst/Y7C0lLYvkXIQDwQp685fEsjGg6zFi3LvokKriXrLTMZvYRSNXEzR8Roj6n
-# 0BoEEaC3ws3NUMuH9b+tOuOg4r2YtNrle7d+TFxGWSqLU+9oNlMfKn0+2XOhgg48
+# 9w0BCQQxIgQg+qYudWCuG+5Rn6vGKGSDKhwhUFmZgmn4YK9/jF5LYkwwDQYJKoZI
+# hvcNAQEBBQAEggIAH17wP6HXy1e8AUakgNl1SFjx/fUyMK4k+K+AF2zSE0uuTZTw
+# TqdBa8oYc59MpmjTrDbUNtMk48S8/Dkl3Rjn9I3XsXo4jRa3WsJISPwyKVHeG4aL
+# 1eDbIyoXqQfGYV4yb/pCn2fbsKNZUcx1FTk5GRI5spRHQee/F1Ui5dJrvjIkDchv
+# i82mQ+WTi6Q0YiHhRnTeyCECFK+/mQtlECsLYGN7B54HK4FqIWaj+oNTJbrLFlq7
+# ywN0rwZLlqFf8OHyT9kT4RDKNY6+s3lWeAg/LL+wmWXw1Dbv6gZ2vDDyIFlQQZLl
+# s+koC3XjBKbURu1NXz/hLme/UYADv7zK8Og7WGhoQGwU/4AQjISGbrkQc4rtHqYz
+# Bcr2h5ZKiviUDjJoAjMlSj4YAB21ACfJIkpz1SnsQsypGqcR7jYHITMVh4fq9kYX
+# PEb8+ZiQsLUQOAaFrkLi+FtbQhOiUauzaQeBMBvKsYGu4KSSL6g/w/ILzm11i2vK
+# Zqk/Q/YKuW9wrQ/HM5DCe1Hk10TZkoA/8UjfGo+j+fYze7JVsSCTMd92nSBGnpVs
+# pLAKiSBhZpK6xm5fOOAGoBdgojAlq1r2cvk5XdtcU760xoK19DgK/4osURjyMmga
+# 2LnyiPLq6gEQDCHRjOk/S9KhthIOK5Rdt8rArz6M8TbL8U8blE6WyACaRKahgg48
 # MIIOOAYKKwYBBAGCNwMDATGCDigwgg4kBgkqhkiG9w0BBwKggg4VMIIOEQIBAzEN
 # MAsGCWCGSAFlAwQCATCCAQ4GCyqGSIb3DQEJEAEEoIH+BIH7MIH4AgEBBgtghkgB
-# hvhFAQcXAzAxMA0GCWCGSAFlAwQCAQUABCAM3sF/4thY4zqhW79Nq45dM5ppIilE
-# VmhhmxXvR+Yz7wIUTVZVILfflV2f3gYd2VfPDCYaT5YYDzIwMjIxMDE5MTI0NzIx
+# hvhFAQcXAzAxMA0GCWCGSAFlAwQCAQUABCAMItd6/iAMgDfv8r0FnFWtHQb6PHhQ
+# BAJ2ldU+bTxEBQIUJTRP9nZVQmN4KDtsEg6FRmO4hOgYDzIwMjIxMjE0MTcwOTIw
 # WjADAgEeoIGGpIGDMIGAMQswCQYDVQQGEwJVUzEdMBsGA1UEChMUU3ltYW50ZWMg
 # Q29ycG9yYXRpb24xHzAdBgNVBAsTFlN5bWFudGVjIFRydXN0IE5ldHdvcmsxMTAv
 # BgNVBAMTKFN5bWFudGVjIFNIQTI1NiBUaW1lU3RhbXBpbmcgU2lnbmVyIC0gRzOg
@@ -1365,13 +1370,13 @@ exit $ExitCode
 # A1UEChMUU3ltYW50ZWMgQ29ycG9yYXRpb24xHzAdBgNVBAsTFlN5bWFudGVjIFRy
 # dXN0IE5ldHdvcmsxKDAmBgNVBAMTH1N5bWFudGVjIFNIQTI1NiBUaW1lU3RhbXBp
 # bmcgQ0ECEHvU5a+6zAc/oQEjBCJBTRIwCwYJYIZIAWUDBAIBoIGkMBoGCSqGSIb3
-# DQEJAzENBgsqhkiG9w0BCRABBDAcBgkqhkiG9w0BCQUxDxcNMjIxMDE5MTI0NzIx
-# WjAvBgkqhkiG9w0BCQQxIgQgu78MZFmcyKYN5tl9Uy+dJlH6NHktARcvIJb6dKeH
-# OGcwNwYLKoZIhvcNAQkQAi8xKDAmMCQwIgQgxHTOdgB9AjlODaXk3nwUxoD54oIB
-# PP72U+9dtx/fYfgwCwYJKoZIhvcNAQEBBIIBABHxCxa5cHHqwRLM2Zuw9rrvSPPp
-# Hzbbv8TFl00uBAPlpFz531q6k3NNQ/U6WuElGsbnod8087Yvm5TNGgfvFnen+zMf
-# O7Z5Mxp2NboGIb3BAyM+ytu9hScSi8SXDbLJLpt+AlpTZH4G3aQC4EJBiELGxZaO
-# 16jcmGuscMAmfZquem5n/W94mA/zSXceRhFxrGS9p9z7zqKZ3Xm1tlq5dd+6qjrq
-# 8ICZ401bJoAPXn3YYFphfjRRDoQ5cjO4mdKV5ExAsrdnuHkUL+dFJdwvlgzILfvr
-# 4qLS4BaQBSTvR5XWYlCBhL4MmyvEPgSznbkO4rrO92bRddw6Z7FtZLMG9jU=
+# DQEJAzENBgsqhkiG9w0BCRABBDAcBgkqhkiG9w0BCQUxDxcNMjIxMjE0MTcwOTIw
+# WjAvBgkqhkiG9w0BCQQxIgQgPhrzvP4ii7eH1cVvI42O/PTJi1f7zAy/EXzjPRh5
+# yPgwNwYLKoZIhvcNAQkQAi8xKDAmMCQwIgQgxHTOdgB9AjlODaXk3nwUxoD54oIB
+# PP72U+9dtx/fYfgwCwYJKoZIhvcNAQEBBIIBAJwfEP/LvG76xV14ONmP5gwws+bz
+# BPxjWd+OQqThfxo3Wl5ypng2Iy9cCovYNNK3U1SFPR+EqG7q31o5qljD417FAcP2
+# MjH5gKK+mtN+8UlowOA/v/z4RzZdFknspYJ/fWzG0aIsLP1jh61yqCgW2dZDNNhu
+# zYVMXaq3ekhL0fLHdb4DfFv1Vxhnw00HR3BS5fH+Vfo58+ZlDacDtXCUtYYo5Pbu
+# aPoAaWoq4wEcyrTS5A84tYY5DiPNitb7HJuiXXaBjj/TcLZt6EqD3yIAJVBrxhxh
+# hIPTN6N48lqRkuDD/rUbV9/qRHFKrKpPCTAa46iXGUIS2c4lYLiMuAZxyRY=
 # SIG # End signature block
