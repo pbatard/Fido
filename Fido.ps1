@@ -1,5 +1,5 @@
 ﻿#
-# Fido v1.39 - Feature ISO Downloader, for retail Windows images and UEFI Shell
+# Fido v1.40 - Feature ISO Downloader, for retail Windows images and UEFI Shell
 # Copyright © 2019-2023 Pete Batard <pete@akeo.ie>
 # Command line support: Copyright © 2021 flx5
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
@@ -24,7 +24,7 @@
 #region Parameters
 param(
 	# (Optional) The title to display on the application window.
-	[string]$AppTitle = "Fido - Retail Windows ISO Downloader",
+	[string]$AppTitle = "Fido - Feature ISO Downloader",
 	# (Optional) '|' separated UI localization strings.
 	[string]$LocData,
 	# (Optional) Path to a file that should be used for the UI icon.
@@ -617,7 +617,7 @@ if ($Cmd) {
 
 # Localization
 $EnglishMessages = "en-US|Version|Release|Edition|Language|Architecture|Download|Continue|Back|Close|Cancel|Error|Please wait...|" +
-	"Download using a browser|Temporarily banned by Microsoft for requesting too many downloads - Please try again later...|" +
+	"Download using a browser|Download of Windows ISOs is unavailable due to Microsoft having altered their website to prevent it.|" +
 	"PowerShell 3.0 or later is required to run this script.|Do you want to go online and download it?"
 [string[]]$English = $EnglishMessages.Split('|')
 [string[]]$Localized = $null
@@ -712,7 +712,15 @@ function Get-Windows-Languages([int]$SelectedVersion, [int]$SelectedEdition)
 	} else {
 		# Microsoft download protection now requires the sessionId to be whitelisted through vlscppe.microsoft.com/tags
 		$url = "https://vlscppe.microsoft.com/tags?org_id=y6jn8c31&session_id=" + $SessionId
-		Invoke-WebRequest -UseBasicParsing -MaximumRedirection 0 -UserAgent $UserAgent $url | Out-Null
+		if ($Verbosity -ge 2) {
+			Write-Host Querying $url
+		}
+		try {
+			Invoke-WebRequest -UseBasicParsing -MaximumRedirection 0 -UserAgent $UserAgent $url | Out-Null
+		} catch {
+			Error($_.Exception.Message)
+			return @()
+		}
 		$url = "https://www.microsoft.com/" + $QueryLocale + "/api/controls/contentinclude/html"
 		$url += "?pageId=" + $RequestData["GetLangs"][0]
 		$url += "&host=www.microsoft.com"
@@ -814,7 +822,7 @@ function Get-Windows-Download-Links([int]$SelectedVersion, [int]$SelectedRelease
 
 		try {
 			$Is64 = [Environment]::Is64BitOperatingSystem
-			# Must add a referer for POST requests, else Microsoft's servers will deny them
+			# Must add a referer for this request, else Microsoft's servers will deny it
 			$ref = "https://www.microsoft.com/software-download/windows11"
 			$wr = [System.Net.WebRequest]::Create($url)
 			# Windows 7 PowerShell doesn't support 'Invoke-WebRequest -Headers @{"Referer" = $ref}'
@@ -831,7 +839,7 @@ function Get-Windows-Download-Links([int]$SelectedVersion, [int]$SelectedRelease
 				$m = $regex.Match($r)
 				# Make the typical error message returned by Microsoft's servers more presentable
 				$Alt = $m.Groups[1] -replace "<[^>]+>" -replace "\s+", " "
-				$Alt += " " + $SessionId
+				$Alt += " " + $SessionId + "."
 				if (-not $Alt) {
 					$Alt = "Could not retrieve architectures from server"
 				}
@@ -1065,7 +1073,7 @@ $XMLForm.Title = $AppTitle
 if ($Icon) {
 	$XMLForm.Icon = $Icon
 } else {
-	$XMLForm.Icon = [Gui.Utils]::ExtractIcon("shell32.dll", -41, $true) | ConvertTo-ImageSource
+	$XMLForm.Icon = [Gui.Utils]::ExtractIcon("imageres.dll", -5205, $true) | ConvertTo-ImageSource
 }
 if ($Locale.StartsWith("ar") -or $Locale.StartsWith("fa") -or $Locale.StartsWith("he")) {
 	$XMLForm.FlowDirection = "RightToLeft"
@@ -1203,8 +1211,8 @@ exit $ExitCode
 # SIG # Begin signature block
 # MIIkWQYJKoZIhvcNAQcCoIIkSjCCJEYCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB4DCsid0Hcotrs
-# wgTJd2lY28Qu5omAVl5T1mk2BP1C1qCCElkwggVvMIIEV6ADAgECAhBI/JO0YFWU
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAuXe+lw6QqXJzc
+# 9+Zn3nKsuSkz4nlxfTZDx6JDucHWTKCCElkwggVvMIIEV6ADAgECAhBI/JO0YFWU
 # jTanyYqJ1pQWMA0GCSqGSIb3DQEBDAUAMHsxCzAJBgNVBAYTAkdCMRswGQYDVQQI
 # DBJHcmVhdGVyIE1hbmNoZXN0ZXIxEDAOBgNVBAcMB1NhbGZvcmQxGjAYBgNVBAoM
 # EUNvbW9kbyBDQSBMaW1pdGVkMSEwHwYDVQQDDBhBQUEgQ2VydGlmaWNhdGUgU2Vy
@@ -1307,23 +1315,23 @@ exit $ExitCode
 # aWMgQ29kZSBTaWduaW5nIENBIEVWIFIzNgIRAL+xUAG79ZLUlip3l+pzb6MwDQYJ
 # YIZIAWUDBAIBBQCgfDAQBgorBgEEAYI3AgEMMQIwADAZBgkqhkiG9w0BCQMxDAYK
 # KwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkqhkiG
-# 9w0BCQQxIgQgZJjDDP2YWPPmGrEuHBNI0duArydubM/gmnG4BcpOG8cwDQYJKoZI
-# hvcNAQEBBQAEggIAeMyrcbmpsFeC8p7Hw21CgIxWszJ1tkiFmVcEuf5TU5NSUwYA
-# NsT/TaKGDc0mn313EiA3OM2yBwWdJFQsF0O87carfF3FXoKNU90f/IbyzhiOuGXo
-# sT2LeKGy57hdmi+j0pcf1DorfKKQ3XQ45RI1USCedKBxaC0ZVGl1PCHogtxxwvyG
-# tV5J90NS0ztTtuL2M2JCBobE6v7p6AWxkffzb97JygXY8yKc5E7XWuUEtU7Lkv6t
-# bARG9idcAi151yNkReF+iZh1ZrS7+awhnWqmzxJ1XTf2lvZObl7YfK7CekLtjxzO
-# M1Q1iLRzbIeMX8B9Z0S6TUtKDPAzWiIKUUWBaad/ojG3uZl7fA6WEgB2mt0CQNOG
-# UAre5uYpqTpvNXCksAYcjmYmQcd2NenXSq4gnIbiPQdFXl/AMpFE127Cd7R7H/vP
-# 6a4mbsfuPuQD9sHK79hGVl86iiCq00Jur3asfbV1RGKCJZTiQXzmXRaHD8Ce8a0h
-# 2PmukEnTDNJv1t3gKMojBmT7KDXS8v6idRXVnovGrf0+0WXOCau3nBWfBAZB8A8r
-# GUS0k9JyqilE6aAE8no59wqvXIDMKLLP6Br8czBcTIAaAoMAjvfJeYCsNJZH5ICz
-# wEPxpQyGLzL/Z2LzdNUFs+j9m1zQ7a4d2ln5G5vDa/Qbs5IwGm4PRix2tqyhgg49
+# 9w0BCQQxIgQgd0mFrLQo5p+VB10EJeoEI0jwzAtBF9HSp94HO6HxuR0wDQYJKoZI
+# hvcNAQEBBQAEggIAP2ZlPRC3WtZ0pndGK0BvOyCARewmoWaK+0TOFwOQo4TwF7Up
+# JfTaT6k+de6bZuyjBhWgpkF+UA6gT087KtzxYqpnDPVEzc5JR6HOa7TFkYAvw5xR
+# zZgHs0HXP4WnQq/utkYU5680iMaalkMPFqGjcbVA9H/EV7A/aFtkqVc8qoQac3ta
+# y9gPl08aVF6LOBYKg3WiC/1icd3L9dx0dml6f288ZLyEFJ/LizZH4QEsxKO2cPde
+# 8Q2WOmeobKEhTuBzE5psOXMM8h+467cmnh+zzh9oE8u4Rp4zrFYrk5iTZiEZZezK
+# Ck4QP8ZcsNwLjC4hldk2B3/1IyoY+Z0qABpoR9ujbMEesjjdp1P9NoP8xg3nILxP
+# Gqtp8ylFo7QKgNNxULKtbr4b7jUEBhvGkiUPgIwc0Onw3v9j2H7g49/07W+85ccp
+# 2pDQrwATiHoa2qWM+Ltk5LzcCNzrjxGXKDdQ7z2NhfXMxrIc0/0e8rENPzScJVz/
+# X5rOFxYyVUBbEHWPs9SzpsnvFcqDEnUUfiFRSfn1SbFkyE5EVMxxexmwmj0aL05b
+# iVwYwmgZv7ACjDVTmrDtQfd6EcDYji82l8QrYqC9LS8XZbIxbR9Aly3zEPmAk8NW
+# H8ZU9BJYBA3YxUmvtzdp+9JYFt6DBv5E+xLePWPa6ZsG3GozZAYGowIyFvOhgg49
 # MIIOOQYKKwYBBAGCNwMDATGCDikwgg4lBgkqhkiG9w0BBwKggg4WMIIOEgIBAzEN
 # MAsGCWCGSAFlAwQCATCCAQ8GCyqGSIb3DQEJEAEEoIH/BIH8MIH5AgEBBgtghkgB
-# hvhFAQcXAzAxMA0GCWCGSAFlAwQCAQUABCDJlO4Qu/KVPQXhqzZUwkQuxnuXzr+y
-# ALuw9uhTw5x50QIVAI5lXv0dlojOQ5uU1re1l1WZ0wZjGA8yMDIzMDEwODIyMDQ0
-# NFowAwIBHqCBhqSBgzCBgDELMAkGA1UEBhMCVVMxHTAbBgNVBAoTFFN5bWFudGVj
+# hvhFAQcXAzAxMA0GCWCGSAFlAwQCAQUABCCYibsHfj0DuFPWNQfD2we6SEIeVKOj
+# I83T3lX+EPUq7AIVAP+gPY2CaoJ8rp6lnlDDBI/jki7UGA8yMDIzMDEwOTE3MzEx
+# MlowAwIBHqCBhqSBgzCBgDELMAkGA1UEBhMCVVMxHTAbBgNVBAoTFFN5bWFudGVj
 # IENvcnBvcmF0aW9uMR8wHQYDVQQLExZTeW1hbnRlYyBUcnVzdCBOZXR3b3JrMTEw
 # LwYDVQQDEyhTeW1hbnRlYyBTSEEyNTYgVGltZVN0YW1waW5nIFNpZ25lciAtIEcz
 # oIIKizCCBTgwggQgoAMCAQICEHsFsdRJaFFE98mJ0pwZnRIwDQYJKoZIhvcNAQEL
@@ -1386,13 +1394,13 @@ exit $ExitCode
 # BgNVBAoTFFN5bWFudGVjIENvcnBvcmF0aW9uMR8wHQYDVQQLExZTeW1hbnRlYyBU
 # cnVzdCBOZXR3b3JrMSgwJgYDVQQDEx9TeW1hbnRlYyBTSEEyNTYgVGltZVN0YW1w
 # aW5nIENBAhB71OWvuswHP6EBIwQiQU0SMAsGCWCGSAFlAwQCAaCBpDAaBgkqhkiG
-# 9w0BCQMxDQYLKoZIhvcNAQkQAQQwHAYJKoZIhvcNAQkFMQ8XDTIzMDEwODIyMDQ0
-# NFowLwYJKoZIhvcNAQkEMSIEIJCXdWNCvCOkl1MVXUM64ID5Hk3rlqG10XOEU4X6
-# lgIdMDcGCyqGSIb3DQEJEAIvMSgwJjAkMCIEIMR0znYAfQI5Tg2l5N58FMaA+eKC
-# ATz+9lPvXbcf32H4MAsGCSqGSIb3DQEBAQSCAQCIgN/3Y1woMyQD3RfjYoePc1VS
-# M3RbvhneaXXr6LSxRh/MJd04waviGo0j/8hdoMzmyDBTVJdGuY7K2jZGFg82y5H6
-# qQAcgkTT0KyXTkT6MwjBor1nRG5IY/20NXtXIOfN3KmRQnZy+lLH3rXguxEEFObw
-# DNHTB3sAAxaJdJQhKKqw1cuExubwLEzKbU+HFvNavyd3iTf3Free1eYQYmO5LliK
-# SYWJ4CbawK2qu0U/e5xznALGZ5NdJ3tZAFK3w0ZF0W9m6CfNW0TmjG6ae8RF4J+4
-# SWGCh2KrY4PVhyKxKiB3z5rCHYGkCrNJJdlOkoaUVBa/MQ+SildBrHvnhZZ1
+# 9w0BCQMxDQYLKoZIhvcNAQkQAQQwHAYJKoZIhvcNAQkFMQ8XDTIzMDEwOTE3MzEx
+# MlowLwYJKoZIhvcNAQkEMSIEILyGkqcg5SCsV2dggsqzsM9fzRPqlQAd3aZLuL4L
+# bo/jMDcGCyqGSIb3DQEJEAIvMSgwJjAkMCIEIMR0znYAfQI5Tg2l5N58FMaA+eKC
+# ATz+9lPvXbcf32H4MAsGCSqGSIb3DQEBAQSCAQBzcZ7440L82Z+K7PWUV1MHAay6
+# nK6xe7mQskRcG/BBwgDwZc8wR2QG0orHTNqNg99bfPRezn6YFRd6yDrQjDZsQ+10
+# 2WQbtRqxUpuFAlL4kWZlra4VM5rB2u1YkhleZYwFrQNUwjDwvQ6XTaviKbk5gOAI
+# z7bGgUFgJ4DVEbQWvy9/mMOpO50DsmwNdAFqj67N9wfZm6mPTiDldINEAN6K3QtN
+# oGn9d/kLGKY3Uxxej0TLNb8wCpQPWMgryyHy32PjSvbaXnDy8FLUnw9u5NpgK7qV
+# EJjcjiwTaR+PrDbskzu+knaphRGWkk8TmqKVLC3Zi/puTeDBafarunOPzXIV
 # SIG # End signature block
