@@ -1,5 +1,5 @@
 ﻿#
-# Fido v1.41 - Feature ISO Downloader, for retail Windows images and UEFI Shell
+# Fido v1.42 - Feature ISO Downloader, for retail Windows images and UEFI Shell
 # Copyright © 2019-2023 Pete Batard <pete@akeo.ie>
 # Command line support: Copyright © 2021 flx5
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
@@ -618,28 +618,23 @@ if ($Cmd) {
 # Localization
 $EnglishMessages = "en-US|Version|Release|Edition|Language|Architecture|Download|Continue|Back|Close|Cancel|Error|Please wait...|" +
 	"Download using a browser|Download of Windows ISOs is unavailable due to Microsoft having altered their website to prevent it.|" +
-	"PowerShell 3.0 or later is required to run this script.|Do you want to go online and download it?"
+	"PowerShell 3.0 or later is required to run this script.|Do you want to go online and download it?|" +
+	"This feature is not available for this version of Windows."
 [string[]]$English = $EnglishMessages.Split('|')
 [string[]]$Localized = $null
 if ($LocData -and (-not $LocData.StartsWith("en-US"))) {
 	$Localized = $LocData.Split('|')
-	if ($Localized.Length -ne $English.Length) {
-		Write-Host "Error: Missing or extra translated messages provided ($($Localized.Length)/$($English.Length))"
-		exit 101
+	# Adjust the $Localized array if we have more or fewer strings than in $EnglishMessages
+	if ($Localized.Length -lt $English.Length) {
+		while ($Localized.Length -ne $English.Length) {
+			$Localized += $English[$Localized.Length]
+		}
+	} elseif ($Localized.Length -gt $English.Length) {
+		$Localized = $LocData.Split('|')[0..($English.Length - 1)]
 	}
 	$Locale = $Localized[0]
 }
 $QueryLocale = $Locale
-
-# Make sure PowerShell 3.0 or later is used (for Invoke-WebRequest)
-if ($PSVersionTable.PSVersion.Major -lt 3) {
-	Write-Host Error: PowerShell 3.0 or later is required to run this script.
-	$Msg = "$(Get-Translation($English[15]))`n$(Get-Translation($English[16]))"
-	if ([System.Windows.MessageBox]::Show($Msg, $(Get-Translation("Error")), "YesNo", "Error") -eq "Yes") {
-		Start-Process -FilePath https://www.microsoft.com/download/details.aspx?id=34595
-	}
-	exit 102
-}
 
 # Convert a size in bytes to a human readable string
 function Size-To-Human-Readable([uint64]$size)
@@ -825,16 +820,7 @@ function Get-Windows-Download-Links([int]$SelectedVersion, [int]$SelectedRelease
 			$Is64 = [Environment]::Is64BitOperatingSystem
 			# Must add a referer for this request, else Microsoft's servers will deny it
 			$ref = "https://www.microsoft.com/software-download/windows11"
-			$wr = [System.Net.WebRequest]::Create($url)
-			# Windows 7 PowerShell doesn't support 'Invoke-WebRequest -Headers @{"Referer" = $ref}'
-			# (produces "The 'Referer' header must be modified using the appropriate property or method")
-			# so we use StreamReader() with GetResponseStream() and do this whole gymkhana instead...
-			$wr.Method = "POST"
-			$wr.Referer = $ref
-			$wr.UserAgent = $UserAgent
-			$wr.ContentLength = 0
-			$sr = New-Object System.IO.StreamReader($wr.GetResponse().GetResponseStream())
-			$r = $sr.ReadToEnd()
+			$r = Invoke-WebRequest -Method Post -Headers @{ "Referer" = $ref } -UseBasicParsing -UserAgent $UserAgent -WebSession $Session $url
 			if ($r -match "errorModalMessage") {
 				$regex = New-Object Text.RegularExpressions.Regex '<p id="errorModalMessage">(.+?)<\/p>'
 				$m = $regex.Match($r)
@@ -915,6 +901,12 @@ if ($Cmd) {
 	$winLanguageId = $null
 	$winLanguageName = $null
 	$winLink = $null
+
+	# Windows 7 has become too much of a liability
+	if ([System.Environment]::OSVersion.Version -le (new-object 'Version' 6, 1)) {
+		Error(Get-Translation("This feature is not available for this version of Windows."))
+		exit 403
+	}
 
 	$i = 0
 	$Selected = ""
@@ -1083,6 +1075,12 @@ $WindowsVersionTitle.Text = Get-Translation("Version")
 $Continue.Content = Get-Translation("Continue")
 $Back.Content = Get-Translation("Close")
 
+# Windows 7 has become too much of a liability
+if ([System.Environment]::OSVersion.Version -le (new-object 'Version' 6, 1)) {
+	Error(Get-Translation("This feature is not available for this version of Windows."))
+	exit 403
+}
+
 # Populate the Windows versions
 $i = 0
 $versions = @()
@@ -1210,10 +1208,10 @@ $XMLForm.ShowDialog() | Out-Null
 exit $ExitCode
 
 # SIG # Begin signature block
-# MIIkWAYJKoZIhvcNAQcCoIIkSTCCJEUCAQExDzANBglghkgBZQMEAgEFADB5Bgor
+# MIIkWQYJKoZIhvcNAQcCoIIkSjCCJEYCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCyA1DxwYegKJ2C
-# H681zwD4uu1/m7nOUczTmgbYeIwE0KCCElkwggVvMIIEV6ADAgECAhBI/JO0YFWU
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAOpac2NvCU8wgb
+# aXm2UzTNdisic/FJmjqALkx2rTp7VaCCElkwggVvMIIEV6ADAgECAhBI/JO0YFWU
 # jTanyYqJ1pQWMA0GCSqGSIb3DQEBDAUAMHsxCzAJBgNVBAYTAkdCMRswGQYDVQQI
 # DBJHcmVhdGVyIE1hbmNoZXN0ZXIxEDAOBgNVBAcMB1NhbGZvcmQxGjAYBgNVBAoM
 # EUNvbW9kbyBDQSBMaW1pdGVkMSEwHwYDVQQDDBhBQUEgQ2VydGlmaWNhdGUgU2Vy
@@ -1311,97 +1309,97 @@ exit $ExitCode
 # QTYOb9goARWPNlkKbyF9bndu5kLWIlZcOS7IIznOcS4y1J5ZJewBRH4kbuNfCbSl
 # HMZS/rmpFprXXFdje6TRXwgvBs6UOR1zTe5ycumyo5FYBVEFGR1Ps6ZC3z62yLPk
 # pb5YSma1/ut/KplOxOnK74ELd/vTS2i10qmsqP5+m+U2jznmCEwm8g8V1mg94acL
-# iyM9uR5+U3y6OrVRkMnG9K9ZuTGCEVUwghFRAgEBMGwwVzELMAkGA1UEBhMCR0Ix
+# iyM9uR5+U3y6OrVRkMnG9K9ZuTGCEVYwghFSAgEBMGwwVzELMAkGA1UEBhMCR0Ix
 # GDAWBgNVBAoTD1NlY3RpZ28gTGltaXRlZDEuMCwGA1UEAxMlU2VjdGlnbyBQdWJs
 # aWMgQ29kZSBTaWduaW5nIENBIEVWIFIzNgIRAL+xUAG79ZLUlip3l+pzb6MwDQYJ
 # YIZIAWUDBAIBBQCgfDAQBgorBgEEAYI3AgEMMQIwADAZBgkqhkiG9w0BCQMxDAYK
 # KwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkqhkiG
-# 9w0BCQQxIgQghkV9wFJU06Go0jd7fPagSzeond1V7DBGYEmyXshGMdwwDQYJKoZI
-# hvcNAQEBBQAEggIAQiY9/49uWjGdiy2Jmf1YPRLj7F87IHrQOcTHcEuhhZmszJQ4
-# x1624ArYVWIz0FJgqp5fq3jts04jV+rkzxaGIHt+C/R04VPXlE0+Ly/QfB5ewvZG
-# YPKcl9jCGUisJkXv9SkqZDh26CaJLceqUT6CiOLIP0ZdKuZAEXQEaXhaXoeiIJIO
-# nYXc+5u+RpuKDs9Hft3vM9Pu06wCFv+RfyoiCzx5cmoO3GaxPff1ywLQ9DWb2Squ
-# BdZDKubYWamlu3tjeJu9YjeQvhOED0HZphRPvozmLNJ1v7tN0JNZaE/WkqKPsK+p
-# NPT1T3S9lzqRTePNkhngoWwbMlW1RVLUSZnYtAsjEJ3ACobIIRxnymLP5OYmJXtT
-# pN6XV9YjdygreM0F0Q7+qJBgMNPNLMgiTkKhNwVDBwLl5dxqpeR9K1AbOrd3LnWN
-# /84PWAcUDsZZ3CMSzfUKX+M+X1COBbedCxcuoj1Kmtw7zKXZbxQ9e4rUO3PkpQxg
-# G8MySj+GxBxvkwZMR9f5fgbL8jaauv9ZYW2auWMoAHLeosc/hOSjCikZdpc0/5Pb
-# KejGN+G52p2bZsiG0oYI5g3wdMgK0/jzDtmtRk7vBOwFVcPajWk9dJVcZUWSO4Fx
-# NzWrgh6Zd3Nw8bESEkoVKl9sZ3BmZDMAIRMJeh9df88fdGMpphHSvax9iqmhgg48
-# MIIOOAYKKwYBBAGCNwMDATGCDigwgg4kBgkqhkiG9w0BBwKggg4VMIIOEQIBAzEN
-# MAsGCWCGSAFlAwQCATCCAQ4GCyqGSIb3DQEJEAEEoIH+BIH7MIH4AgEBBgtghkgB
-# hvhFAQcXAzAxMA0GCWCGSAFlAwQCAQUABCAuqPrJeyIXyKT4PoyMHW9VPNUbPdyd
-# 9x3e4MJmUjHYAgIUe0QNbKQftlVLV412+ojSFQPpR8UYDzIwMjMwMTI1MjAwMTEw
-# WjADAgEeoIGGpIGDMIGAMQswCQYDVQQGEwJVUzEdMBsGA1UEChMUU3ltYW50ZWMg
-# Q29ycG9yYXRpb24xHzAdBgNVBAsTFlN5bWFudGVjIFRydXN0IE5ldHdvcmsxMTAv
-# BgNVBAMTKFN5bWFudGVjIFNIQTI1NiBUaW1lU3RhbXBpbmcgU2lnbmVyIC0gRzOg
-# ggqLMIIFODCCBCCgAwIBAgIQewWx1EloUUT3yYnSnBmdEjANBgkqhkiG9w0BAQsF
-# ADCBvTELMAkGA1UEBhMCVVMxFzAVBgNVBAoTDlZlcmlTaWduLCBJbmMuMR8wHQYD
-# VQQLExZWZXJpU2lnbiBUcnVzdCBOZXR3b3JrMTowOAYDVQQLEzEoYykgMjAwOCBW
-# ZXJpU2lnbiwgSW5jLiAtIEZvciBhdXRob3JpemVkIHVzZSBvbmx5MTgwNgYDVQQD
-# Ey9WZXJpU2lnbiBVbml2ZXJzYWwgUm9vdCBDZXJ0aWZpY2F0aW9uIEF1dGhvcml0
-# eTAeFw0xNjAxMTIwMDAwMDBaFw0zMTAxMTEyMzU5NTlaMHcxCzAJBgNVBAYTAlVT
-# MR0wGwYDVQQKExRTeW1hbnRlYyBDb3Jwb3JhdGlvbjEfMB0GA1UECxMWU3ltYW50
-# ZWMgVHJ1c3QgTmV0d29yazEoMCYGA1UEAxMfU3ltYW50ZWMgU0hBMjU2IFRpbWVT
-# dGFtcGluZyBDQTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBALtZnVlV
-# T52Mcl0agaLrVfOwAa08cawyjwVrhponADKXak3JZBRLKbvC2Sm5Luxjs+HPPwtW
-# kPhiG37rpgfi3n9ebUA41JEG50F8eRzLy60bv9iVkfPw7mz4rZY5Ln/BJ7h4OcWE
-# pe3tr4eOzo3HberSmLU6Hx45ncP0mqj0hOHE0XxxxgYptD/kgw0mw3sIPk35Crcz
-# Sf/KO9T1sptL4YiZGvXA6TMU1t/HgNuR7v68kldyd/TNqMz+CfWTN76ViGrF3PSx
-# S9TO6AmRX7WEeTWKeKwZMo8jwTJBG1kOqT6xzPnWK++32OTVHW0ROpL2k8mc40ju
-# u1MO1DaXhnjFoTcCAwEAAaOCAXcwggFzMA4GA1UdDwEB/wQEAwIBBjASBgNVHRMB
-# Af8ECDAGAQH/AgEAMGYGA1UdIARfMF0wWwYLYIZIAYb4RQEHFwMwTDAjBggrBgEF
-# BQcCARYXaHR0cHM6Ly9kLnN5bWNiLmNvbS9jcHMwJQYIKwYBBQUHAgIwGRoXaHR0
-# cHM6Ly9kLnN5bWNiLmNvbS9ycGEwLgYIKwYBBQUHAQEEIjAgMB4GCCsGAQUFBzAB
-# hhJodHRwOi8vcy5zeW1jZC5jb20wNgYDVR0fBC8wLTAroCmgJ4YlaHR0cDovL3Mu
-# c3ltY2IuY29tL3VuaXZlcnNhbC1yb290LmNybDATBgNVHSUEDDAKBggrBgEFBQcD
-# CDAoBgNVHREEITAfpB0wGzEZMBcGA1UEAxMQVGltZVN0YW1wLTIwNDgtMzAdBgNV
-# HQ4EFgQUr2PWyqNOhXLgp7xB8ymiOH+AdWIwHwYDVR0jBBgwFoAUtnf6aUhHn1MS
-# 1cLqBzJ2B9GXBxkwDQYJKoZIhvcNAQELBQADggEBAHXqsC3VNBlcMkX+DuHUT6Z4
-# wW/X6t3cT/OhyIGI96ePFeZAKa3mXfSi2VZkhHEwKt0eYRdmIFYGmBmNXXHy+Je8
-# Cf0ckUfJ4uiNA/vMkC/WCmxOM+zWtJPITJBjSDlAIcTd1m6JmDy1mJfoqQa3CcmP
-# U1dBkC/hHk1O3MoQeGxCbvC2xfhhXFL1TvZrjfdKer7zzf0D19n2A6gP41P3CnXs
-# xnUuqmaFBJm3+AZX4cYO9uiv2uybGB+queM6AL/OipTLAduexzi7D1Kr0eOUA2AK
-# TaD+J20UMvw/l0Dhv5mJ2+Q5FL3a5NPD6itas5VYVQR9x5rsIwONhSrS/66pYYEw
-# ggVLMIIEM6ADAgECAhB71OWvuswHP6EBIwQiQU0SMA0GCSqGSIb3DQEBCwUAMHcx
-# CzAJBgNVBAYTAlVTMR0wGwYDVQQKExRTeW1hbnRlYyBDb3Jwb3JhdGlvbjEfMB0G
-# A1UECxMWU3ltYW50ZWMgVHJ1c3QgTmV0d29yazEoMCYGA1UEAxMfU3ltYW50ZWMg
-# U0hBMjU2IFRpbWVTdGFtcGluZyBDQTAeFw0xNzEyMjMwMDAwMDBaFw0yOTAzMjIy
-# MzU5NTlaMIGAMQswCQYDVQQGEwJVUzEdMBsGA1UEChMUU3ltYW50ZWMgQ29ycG9y
-# YXRpb24xHzAdBgNVBAsTFlN5bWFudGVjIFRydXN0IE5ldHdvcmsxMTAvBgNVBAMT
-# KFN5bWFudGVjIFNIQTI1NiBUaW1lU3RhbXBpbmcgU2lnbmVyIC0gRzMwggEiMA0G
-# CSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCvDoqq+Ny/aXtUF3FHCb2NPIH4dBV3
-# Z5Cc/d5OAp5LdvblNj5l1SQgbTD53R2D6T8nSjNObRaK5I1AjSKqvqcLG9IHtjy1
-# GiQo+BtyUT3ICYgmCDr5+kMjdUdwDLNfW48IHXJIV2VNrwI8QPf03TI4kz/lLKbz
-# WSPLgN4TTfkQyaoKGGxVYVfR8QIsxLWr8mwj0p8NDxlsrYViaf1OhcGKUjGrW9jJ
-# dFLjV2wiv1V/b8oGqz9KtyJ2ZezsNvKWlYEmLP27mKoBONOvJUCbCVPwKVeFWF7q
-# hUhBIYfl3rTTJrJ7QFNYeY5SMQZNlANFxM48A+y3API6IsW0b+XvsIqbAgMBAAGj
-# ggHHMIIBwzAMBgNVHRMBAf8EAjAAMGYGA1UdIARfMF0wWwYLYIZIAYb4RQEHFwMw
-# TDAjBggrBgEFBQcCARYXaHR0cHM6Ly9kLnN5bWNiLmNvbS9jcHMwJQYIKwYBBQUH
-# AgIwGRoXaHR0cHM6Ly9kLnN5bWNiLmNvbS9ycGEwQAYDVR0fBDkwNzA1oDOgMYYv
-# aHR0cDovL3RzLWNybC53cy5zeW1hbnRlYy5jb20vc2hhMjU2LXRzcy1jYS5jcmww
-# FgYDVR0lAQH/BAwwCgYIKwYBBQUHAwgwDgYDVR0PAQH/BAQDAgeAMHcGCCsGAQUF
-# BwEBBGswaTAqBggrBgEFBQcwAYYeaHR0cDovL3RzLW9jc3Aud3Muc3ltYW50ZWMu
-# Y29tMDsGCCsGAQUFBzAChi9odHRwOi8vdHMtYWlhLndzLnN5bWFudGVjLmNvbS9z
-# aGEyNTYtdHNzLWNhLmNlcjAoBgNVHREEITAfpB0wGzEZMBcGA1UEAxMQVGltZVN0
-# YW1wLTIwNDgtNjAdBgNVHQ4EFgQUpRMBqZ+FzBtuFh5fOzGqeTYAex0wHwYDVR0j
-# BBgwFoAUr2PWyqNOhXLgp7xB8ymiOH+AdWIwDQYJKoZIhvcNAQELBQADggEBAEae
-# r/C4ol+imUjPqCdLIc2yuaZycGMv41UpezlGTud+ZQZYi7xXipINCNgQujYk+gp7
-# +zvTYr9KlBXmgtuKVG3/KP5nz3E/5jMJ2aJZEPQeSv5lzN7Ua+NSKXUASiulzMub
-# 6KlN97QXWZJBw7c/hub2wH9EPEZcF1rjpDvVaSbVIX3hgGd+Yqy3Ti4VmuWcI69b
-# EepxqUH5DXk4qaENz7Sx2j6aescixXTN30cJhsT8kSWyG5bphQjo3ep0YG5gpVZ6
-# DchEWNzm+UgUnuW/3gC9d7GYFHIUJN/HESwfAD/DSxTGZxzMHgajkF9cVIs+4zNb
-# gg/Ft4YCTnGf6WZFP3YxggJaMIICVgIBATCBizB3MQswCQYDVQQGEwJVUzEdMBsG
-# A1UEChMUU3ltYW50ZWMgQ29ycG9yYXRpb24xHzAdBgNVBAsTFlN5bWFudGVjIFRy
-# dXN0IE5ldHdvcmsxKDAmBgNVBAMTH1N5bWFudGVjIFNIQTI1NiBUaW1lU3RhbXBp
-# bmcgQ0ECEHvU5a+6zAc/oQEjBCJBTRIwCwYJYIZIAWUDBAIBoIGkMBoGCSqGSIb3
-# DQEJAzENBgsqhkiG9w0BCRABBDAcBgkqhkiG9w0BCQUxDxcNMjMwMTI1MjAwMTEw
-# WjAvBgkqhkiG9w0BCQQxIgQgc3vhzrShNhu9c86BzACvzjsyq6mGfUC5lnjnmheR
-# lXQwNwYLKoZIhvcNAQkQAi8xKDAmMCQwIgQgxHTOdgB9AjlODaXk3nwUxoD54oIB
-# PP72U+9dtx/fYfgwCwYJKoZIhvcNAQEBBIIBABFl9vc68ULyXJl07hEAx9S8cbMg
-# 3klf7ORGPe0ttXXsQZPldKylCAqT8XuJRZMAOYrMhMvG79N8LIETXvyhgyVdGGzy
-# rZkVIry6HXkAuZysJ+8xu4Oshf6NFMHs1ATTg2jLWBZ8r39GrUAu1oSL+q8laQE3
-# HvBvmWaM4Yv1/N1OdEHcgw2Zdxvy8P6g3bfNzv1SqMtf3Nn4TUv0RQZ5GJ9e8cfN
-# W19bcP37k5QR4AIuG3ItzEAyHppFYGM2bQ+X0KtWmWGpFeRd6Zd/pauS1PD7f87q
-# d7bG1jvjgyLAuxGxF/xSN/QizrOvWnV1Eya13mELBDNtg9UhUcxzmofj4Zw=
+# 9w0BCQQxIgQg2FDAE5Hu2CF2vKfl1X/q022ugFJVjTcwO3Ich9hrIzEwDQYJKoZI
+# hvcNAQEBBQAEggIAjjh0nIw1L+C64141VG69Gvhn+ju48UdhSc+4opCYZezhs+cl
+# UaWB0GOTEk/s8MB4E3Xw7Pxuv7vKNuppvPwsgqNj7mEC0D082nau7X5gpvyNz7FX
+# pvlLzSLjQ3BUkHfKOjedIAiKpj3LoSWoI6mDMlS/CLtbnTF/8Zxr8wMJ883leFqX
+# 8zv3F+JNwu2RbCNrO433bL6gramZJGlEhvEBLpPFitQbpf90fg39+OdxTD5htUF1
+# bW7aLD1mnTTF8Mq7W2IkawqHj215+DcHyRead4aimKkMowQ5kOct5uC1MuQ+NKmI
+# IHbNzUzQXwL6vMCLvoixjj6FuoOFrtUzo39mPazdO+rY6p/n3WanDfq2A7WBmmFw
+# Nwt0zBNOZ9W4PpXWS2G+M21Tg/bmQCqNwZ4BIGYc3GHJq5RBkct/OL5PzMdBnx47
+# rVqoesZSLLXfwk5AU/MGrHfOTnmJj0YfdB8fwh93RQACYm9d4Oq69tkEXyEGKHDt
+# TVYSyOW9qsd5rG6gDHAl8yC0UCpeadcQW7eydnUxiBxGQsrs8xC8dSedP4UxSQEd
+# xuzAUtTnVUMtnfDF+QGVzLMOaeUaUQoV0PPVojFPaS55z7+Mdg6ZdEfWH5sftK85
+# J1EfMp39HgKX8jgRaWVBCMLNty0oCiPrE9e+kHQ1SCrJh1vJ5a+h5wjqd/uhgg49
+# MIIOOQYKKwYBBAGCNwMDATGCDikwgg4lBgkqhkiG9w0BBwKggg4WMIIOEgIBAzEN
+# MAsGCWCGSAFlAwQCATCCAQ8GCyqGSIb3DQEJEAEEoIH/BIH8MIH5AgEBBgtghkgB
+# hvhFAQcXAzAxMA0GCWCGSAFlAwQCAQUABCBXssU48GczMwdUTL7k3lkrMzxG2EmX
+# Sq8oj8HW4cDJ0gIVAN3GeJOhnYwoDuxcyfPWnBBmn/NzGA8yMDIzMDEyNzEzMjgx
+# NFowAwIBHqCBhqSBgzCBgDELMAkGA1UEBhMCVVMxHTAbBgNVBAoTFFN5bWFudGVj
+# IENvcnBvcmF0aW9uMR8wHQYDVQQLExZTeW1hbnRlYyBUcnVzdCBOZXR3b3JrMTEw
+# LwYDVQQDEyhTeW1hbnRlYyBTSEEyNTYgVGltZVN0YW1waW5nIFNpZ25lciAtIEcz
+# oIIKizCCBTgwggQgoAMCAQICEHsFsdRJaFFE98mJ0pwZnRIwDQYJKoZIhvcNAQEL
+# BQAwgb0xCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5WZXJpU2lnbiwgSW5jLjEfMB0G
+# A1UECxMWVmVyaVNpZ24gVHJ1c3QgTmV0d29yazE6MDgGA1UECxMxKGMpIDIwMDgg
+# VmVyaVNpZ24sIEluYy4gLSBGb3IgYXV0aG9yaXplZCB1c2Ugb25seTE4MDYGA1UE
+# AxMvVmVyaVNpZ24gVW5pdmVyc2FsIFJvb3QgQ2VydGlmaWNhdGlvbiBBdXRob3Jp
+# dHkwHhcNMTYwMTEyMDAwMDAwWhcNMzEwMTExMjM1OTU5WjB3MQswCQYDVQQGEwJV
+# UzEdMBsGA1UEChMUU3ltYW50ZWMgQ29ycG9yYXRpb24xHzAdBgNVBAsTFlN5bWFu
+# dGVjIFRydXN0IE5ldHdvcmsxKDAmBgNVBAMTH1N5bWFudGVjIFNIQTI1NiBUaW1l
+# U3RhbXBpbmcgQ0EwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC7WZ1Z
+# VU+djHJdGoGi61XzsAGtPHGsMo8Fa4aaJwAyl2pNyWQUSym7wtkpuS7sY7Phzz8L
+# VpD4Yht+66YH4t5/Xm1AONSRBudBfHkcy8utG7/YlZHz8O5s+K2WOS5/wSe4eDnF
+# hKXt7a+Hjs6Nx23q0pi1Oh8eOZ3D9Jqo9IThxNF8ccYGKbQ/5IMNJsN7CD5N+Qq3
+# M0n/yjvU9bKbS+GImRr1wOkzFNbfx4Dbke7+vJJXcnf0zajM/gn1kze+lYhqxdz0
+# sUvUzugJkV+1hHk1inisGTKPI8EyQRtZDqk+scz51ivvt9jk1R1tETqS9pPJnONI
+# 7rtTDtQ2l4Z4xaE3AgMBAAGjggF3MIIBczAOBgNVHQ8BAf8EBAMCAQYwEgYDVR0T
+# AQH/BAgwBgEB/wIBADBmBgNVHSAEXzBdMFsGC2CGSAGG+EUBBxcDMEwwIwYIKwYB
+# BQUHAgEWF2h0dHBzOi8vZC5zeW1jYi5jb20vY3BzMCUGCCsGAQUFBwICMBkaF2h0
+# dHBzOi8vZC5zeW1jYi5jb20vcnBhMC4GCCsGAQUFBwEBBCIwIDAeBggrBgEFBQcw
+# AYYSaHR0cDovL3Muc3ltY2QuY29tMDYGA1UdHwQvMC0wK6ApoCeGJWh0dHA6Ly9z
+# LnN5bWNiLmNvbS91bml2ZXJzYWwtcm9vdC5jcmwwEwYDVR0lBAwwCgYIKwYBBQUH
+# AwgwKAYDVR0RBCEwH6QdMBsxGTAXBgNVBAMTEFRpbWVTdGFtcC0yMDQ4LTMwHQYD
+# VR0OBBYEFK9j1sqjToVy4Ke8QfMpojh/gHViMB8GA1UdIwQYMBaAFLZ3+mlIR59T
+# EtXC6gcydgfRlwcZMA0GCSqGSIb3DQEBCwUAA4IBAQB16rAt1TQZXDJF/g7h1E+m
+# eMFv1+rd3E/zociBiPenjxXmQCmt5l30otlWZIRxMCrdHmEXZiBWBpgZjV1x8viX
+# vAn9HJFHyeLojQP7zJAv1gpsTjPs1rSTyEyQY0g5QCHE3dZuiZg8tZiX6KkGtwnJ
+# j1NXQZAv4R5NTtzKEHhsQm7wtsX4YVxS9U72a433Snq+8839A9fZ9gOoD+NT9wp1
+# 7MZ1LqpmhQSZt/gGV+HGDvbor9rsmxgfqrnjOgC/zoqUywHbnsc4uw9Sq9HjlANg
+# Ck2g/idtFDL8P5dA4b+ZidvkORS92uTTw+orWrOVWFUEfcea7CMDjYUq0v+uqWGB
+# MIIFSzCCBDOgAwIBAgIQe9Tlr7rMBz+hASMEIkFNEjANBgkqhkiG9w0BAQsFADB3
+# MQswCQYDVQQGEwJVUzEdMBsGA1UEChMUU3ltYW50ZWMgQ29ycG9yYXRpb24xHzAd
+# BgNVBAsTFlN5bWFudGVjIFRydXN0IE5ldHdvcmsxKDAmBgNVBAMTH1N5bWFudGVj
+# IFNIQTI1NiBUaW1lU3RhbXBpbmcgQ0EwHhcNMTcxMjIzMDAwMDAwWhcNMjkwMzIy
+# MjM1OTU5WjCBgDELMAkGA1UEBhMCVVMxHTAbBgNVBAoTFFN5bWFudGVjIENvcnBv
+# cmF0aW9uMR8wHQYDVQQLExZTeW1hbnRlYyBUcnVzdCBOZXR3b3JrMTEwLwYDVQQD
+# EyhTeW1hbnRlYyBTSEEyNTYgVGltZVN0YW1waW5nIFNpZ25lciAtIEczMIIBIjAN
+# BgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArw6Kqvjcv2l7VBdxRwm9jTyB+HQV
+# d2eQnP3eTgKeS3b25TY+ZdUkIG0w+d0dg+k/J0ozTm0WiuSNQI0iqr6nCxvSB7Y8
+# tRokKPgbclE9yAmIJgg6+fpDI3VHcAyzX1uPCB1ySFdlTa8CPED39N0yOJM/5Sym
+# 81kjy4DeE035EMmqChhsVWFX0fECLMS1q/JsI9KfDQ8ZbK2FYmn9ToXBilIxq1vY
+# yXRS41dsIr9Vf2/KBqs/SrcidmXs7DbylpWBJiz9u5iqATjTryVAmwlT8ClXhVhe
+# 6oVIQSGH5d600yaye0BTWHmOUjEGTZQDRcTOPAPstwDyOiLFtG/l77CKmwIDAQAB
+# o4IBxzCCAcMwDAYDVR0TAQH/BAIwADBmBgNVHSAEXzBdMFsGC2CGSAGG+EUBBxcD
+# MEwwIwYIKwYBBQUHAgEWF2h0dHBzOi8vZC5zeW1jYi5jb20vY3BzMCUGCCsGAQUF
+# BwICMBkaF2h0dHBzOi8vZC5zeW1jYi5jb20vcnBhMEAGA1UdHwQ5MDcwNaAzoDGG
+# L2h0dHA6Ly90cy1jcmwud3Muc3ltYW50ZWMuY29tL3NoYTI1Ni10c3MtY2EuY3Js
+# MBYGA1UdJQEB/wQMMAoGCCsGAQUFBwMIMA4GA1UdDwEB/wQEAwIHgDB3BggrBgEF
+# BQcBAQRrMGkwKgYIKwYBBQUHMAGGHmh0dHA6Ly90cy1vY3NwLndzLnN5bWFudGVj
+# LmNvbTA7BggrBgEFBQcwAoYvaHR0cDovL3RzLWFpYS53cy5zeW1hbnRlYy5jb20v
+# c2hhMjU2LXRzcy1jYS5jZXIwKAYDVR0RBCEwH6QdMBsxGTAXBgNVBAMTEFRpbWVT
+# dGFtcC0yMDQ4LTYwHQYDVR0OBBYEFKUTAamfhcwbbhYeXzsxqnk2AHsdMB8GA1Ud
+# IwQYMBaAFK9j1sqjToVy4Ke8QfMpojh/gHViMA0GCSqGSIb3DQEBCwUAA4IBAQBG
+# nq/wuKJfoplIz6gnSyHNsrmmcnBjL+NVKXs5Rk7nfmUGWIu8V4qSDQjYELo2JPoK
+# e/s702K/SpQV5oLbilRt/yj+Z89xP+YzCdmiWRD0Hkr+Zcze1GvjUil1AEorpczL
+# m+ipTfe0F1mSQcO3P4bm9sB/RDxGXBda46Q71Wkm1SF94YBnfmKst04uFZrlnCOv
+# WxHqcalB+Q15OKmhDc+0sdo+mnrHIsV0zd9HCYbE/JElshuW6YUI6N3qdGBuYKVW
+# eg3IRFjc5vlIFJ7lv94AvXexmBRyFCTfxxEsHwA/w0sUxmcczB4Go5BfXFSLPuMz
+# W4IPxbeGAk5xn+lmRT92MYICWjCCAlYCAQEwgYswdzELMAkGA1UEBhMCVVMxHTAb
+# BgNVBAoTFFN5bWFudGVjIENvcnBvcmF0aW9uMR8wHQYDVQQLExZTeW1hbnRlYyBU
+# cnVzdCBOZXR3b3JrMSgwJgYDVQQDEx9TeW1hbnRlYyBTSEEyNTYgVGltZVN0YW1w
+# aW5nIENBAhB71OWvuswHP6EBIwQiQU0SMAsGCWCGSAFlAwQCAaCBpDAaBgkqhkiG
+# 9w0BCQMxDQYLKoZIhvcNAQkQAQQwHAYJKoZIhvcNAQkFMQ8XDTIzMDEyNzEzMjgx
+# NFowLwYJKoZIhvcNAQkEMSIEIOGbH9NNW5OS7T9EtQNpf5TMgfankrB7ExZcVQoW
+# vbDpMDcGCyqGSIb3DQEJEAIvMSgwJjAkMCIEIMR0znYAfQI5Tg2l5N58FMaA+eKC
+# ATz+9lPvXbcf32H4MAsGCSqGSIb3DQEBAQSCAQBqvo3EmRC6euDO0Q5aTkWAl/Ce
+# RCLRpx3wmpGaZgvtknGd8ObJYawWO6s8gay0JpQMs8GHUrbX2gOMtwilBYyF9dLK
+# pCqCVkJtZ9ZE6m2xBNNM6Un7pUSDXeKxRCQbek2qS8RZg5m7Qshp3mSHhYGfqiec
+# q5bmfpK22NG0/gkRW6olPyN72tbINerskDAiOw024d2YtC+1oZXNFIwvGf7+FAWR
+# NNQyvEnwSCzN9+0nO5cd7ggkzEXbeU1cEpY8H0pQivNoMVrPADkOIEyjGug19IsY
+# W4zXj7Ku0WlhwOEDO7T/6h9Bn4NTkPRb7DVXKbVtSaKtXL7omlO6UdHRRUPj
 # SIG # End signature block
