@@ -60,6 +60,11 @@ if ($Win -or $Rel -or $Ed -or $Lang -or $Arch -or $GetUrl) {
 	$Cmd = $True
 }
 
+# The default TLS for Windows 8.x doesn't work with Microsoft's servers so we must force it
+if ([System.Environment]::OSVersion.Version -lt (new-object 'Version' 10, 0)) {
+	[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls -bor [Net.SecurityProtocolType]::Tls11 -bor [Net.SecurityProtocolType]::Tls12
+}
+
 #region Assembly Types
 $code = @"
 [DllImport("shell32.dll", CharSet = CharSet.Auto, SetLastError = true, BestFitMapping = false, ThrowOnUnmappableChar = true)]
@@ -735,7 +740,7 @@ function Get-Windows-Languages([int]$SelectedVersion, [int]$SelectedEdition)
 				Throw-Error -Req $r -Alt "Could not retrieve languages from server"
 			}
 			$r = $r -replace "`n" -replace "`r"
-			$pattern = '.*<select id="product-languages"[^>]+>(.*)</select>.*'
+			$pattern = '.*<select id="product-languages"[^>]*>(.*)</select>.*'
 			$html = [regex]::Match($r, $pattern).Groups[1].Value
 			# Go through an XML conversion to keep all PowerShells happy...
 			$html = $html.Replace("selected value", "value")
@@ -1210,8 +1215,8 @@ exit $ExitCode
 # SIG # Begin signature block
 # MIIkWQYJKoZIhvcNAQcCoIIkSjCCJEYCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAOpac2NvCU8wgb
-# aXm2UzTNdisic/FJmjqALkx2rTp7VaCCElkwggVvMIIEV6ADAgECAhBI/JO0YFWU
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBuOrtG8kcPzgXq
+# BgHg+QiFj8Krt4hlEdCVsJBR6ZJ3a6CCElkwggVvMIIEV6ADAgECAhBI/JO0YFWU
 # jTanyYqJ1pQWMA0GCSqGSIb3DQEBDAUAMHsxCzAJBgNVBAYTAkdCMRswGQYDVQQI
 # DBJHcmVhdGVyIE1hbmNoZXN0ZXIxEDAOBgNVBAcMB1NhbGZvcmQxGjAYBgNVBAoM
 # EUNvbW9kbyBDQSBMaW1pdGVkMSEwHwYDVQQDDBhBQUEgQ2VydGlmaWNhdGUgU2Vy
@@ -1314,23 +1319,23 @@ exit $ExitCode
 # aWMgQ29kZSBTaWduaW5nIENBIEVWIFIzNgIRAL+xUAG79ZLUlip3l+pzb6MwDQYJ
 # YIZIAWUDBAIBBQCgfDAQBgorBgEEAYI3AgEMMQIwADAZBgkqhkiG9w0BCQMxDAYK
 # KwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkqhkiG
-# 9w0BCQQxIgQg2FDAE5Hu2CF2vKfl1X/q022ugFJVjTcwO3Ich9hrIzEwDQYJKoZI
-# hvcNAQEBBQAEggIAjjh0nIw1L+C64141VG69Gvhn+ju48UdhSc+4opCYZezhs+cl
-# UaWB0GOTEk/s8MB4E3Xw7Pxuv7vKNuppvPwsgqNj7mEC0D082nau7X5gpvyNz7FX
-# pvlLzSLjQ3BUkHfKOjedIAiKpj3LoSWoI6mDMlS/CLtbnTF/8Zxr8wMJ883leFqX
-# 8zv3F+JNwu2RbCNrO433bL6gramZJGlEhvEBLpPFitQbpf90fg39+OdxTD5htUF1
-# bW7aLD1mnTTF8Mq7W2IkawqHj215+DcHyRead4aimKkMowQ5kOct5uC1MuQ+NKmI
-# IHbNzUzQXwL6vMCLvoixjj6FuoOFrtUzo39mPazdO+rY6p/n3WanDfq2A7WBmmFw
-# Nwt0zBNOZ9W4PpXWS2G+M21Tg/bmQCqNwZ4BIGYc3GHJq5RBkct/OL5PzMdBnx47
-# rVqoesZSLLXfwk5AU/MGrHfOTnmJj0YfdB8fwh93RQACYm9d4Oq69tkEXyEGKHDt
-# TVYSyOW9qsd5rG6gDHAl8yC0UCpeadcQW7eydnUxiBxGQsrs8xC8dSedP4UxSQEd
-# xuzAUtTnVUMtnfDF+QGVzLMOaeUaUQoV0PPVojFPaS55z7+Mdg6ZdEfWH5sftK85
-# J1EfMp39HgKX8jgRaWVBCMLNty0oCiPrE9e+kHQ1SCrJh1vJ5a+h5wjqd/uhgg49
+# 9w0BCQQxIgQg05raxMBhSlNGSKKC8FJnapa+6vE/03vSGOzVSf+5qz0wDQYJKoZI
+# hvcNAQEBBQAEggIACalF+bzfzG/P8FcTBPsDEskgZxpz9mjcdIdjh8npL3mTg3bY
+# KtB03ofjXIAR1uMmNh6PrxWH2aVVrPGXpylvygesYKcT22RJ6ntUDDVtkBsqVJwO
+# 8ek011eBu6pMqabItF0jzKOloNEDUZp7Q9hleVbhY4d9pJpaUYNMOJpWrXqfbL7v
+# /1PFvvIdgM8O9yZGh4H5BIBx6lti/seL/sP/OGh52AVxRFTH9793dTmtIOzZv2eY
+# aHNkC85bI/DWewbIYiV0Zbq+BKHfWSUduqWsrurrFa+hlIdHBz4DW3WQtUNTV7Kl
+# 7VUGuhMGRLFjjLCy15QtBTh/ksyUzPfGFs9pdOIGj9Yo8cLWZGMykX0BSs0Z4onJ
+# CzT+6wKcKgY4RfKxhiZgen2tmtoFReHDk7P9E6IsYviL6eEKNWdSv0wbkh7Nuxu5
+# OZ1c89DjKAE8A5IvB0BZHGUj1TkbP6bRthKn7wMcPSIwFQnik/wiYIQs/g+q5F2a
+# gseIPliCTbisfakSXcyUlQtbevfOUfPEXMwC3HL//vTnV085MPs48O2EGabxP4mZ
+# 97SN45zc83QBJ0g4IZCs10sFd7suyjkMsoO3I1907nHcCmVEu9o//XLBc1cmKl6h
+# Yb0T0rSEDK2QHF2+ixnFQV8gvWSLKPEDE0NFoYma4qmWZ4iWTwBxICFv25yhgg49
 # MIIOOQYKKwYBBAGCNwMDATGCDikwgg4lBgkqhkiG9w0BBwKggg4WMIIOEgIBAzEN
 # MAsGCWCGSAFlAwQCATCCAQ8GCyqGSIb3DQEJEAEEoIH/BIH8MIH5AgEBBgtghkgB
-# hvhFAQcXAzAxMA0GCWCGSAFlAwQCAQUABCBXssU48GczMwdUTL7k3lkrMzxG2EmX
-# Sq8oj8HW4cDJ0gIVAN3GeJOhnYwoDuxcyfPWnBBmn/NzGA8yMDIzMDEyNzEzMjgx
-# NFowAwIBHqCBhqSBgzCBgDELMAkGA1UEBhMCVVMxHTAbBgNVBAoTFFN5bWFudGVj
+# hvhFAQcXAzAxMA0GCWCGSAFlAwQCAQUABCDwb5vT/Kx7f3XOtY0aMxqHCT3QidKj
+# kEs9NzJqSE9KrwIVALbZBdRLvZtYpWrh4HTz6M7Fwf4bGA8yMDIzMDEyNzEzMzkw
+# MFowAwIBHqCBhqSBgzCBgDELMAkGA1UEBhMCVVMxHTAbBgNVBAoTFFN5bWFudGVj
 # IENvcnBvcmF0aW9uMR8wHQYDVQQLExZTeW1hbnRlYyBUcnVzdCBOZXR3b3JrMTEw
 # LwYDVQQDEyhTeW1hbnRlYyBTSEEyNTYgVGltZVN0YW1waW5nIFNpZ25lciAtIEcz
 # oIIKizCCBTgwggQgoAMCAQICEHsFsdRJaFFE98mJ0pwZnRIwDQYJKoZIhvcNAQEL
@@ -1393,13 +1398,13 @@ exit $ExitCode
 # BgNVBAoTFFN5bWFudGVjIENvcnBvcmF0aW9uMR8wHQYDVQQLExZTeW1hbnRlYyBU
 # cnVzdCBOZXR3b3JrMSgwJgYDVQQDEx9TeW1hbnRlYyBTSEEyNTYgVGltZVN0YW1w
 # aW5nIENBAhB71OWvuswHP6EBIwQiQU0SMAsGCWCGSAFlAwQCAaCBpDAaBgkqhkiG
-# 9w0BCQMxDQYLKoZIhvcNAQkQAQQwHAYJKoZIhvcNAQkFMQ8XDTIzMDEyNzEzMjgx
-# NFowLwYJKoZIhvcNAQkEMSIEIOGbH9NNW5OS7T9EtQNpf5TMgfankrB7ExZcVQoW
-# vbDpMDcGCyqGSIb3DQEJEAIvMSgwJjAkMCIEIMR0znYAfQI5Tg2l5N58FMaA+eKC
-# ATz+9lPvXbcf32H4MAsGCSqGSIb3DQEBAQSCAQBqvo3EmRC6euDO0Q5aTkWAl/Ce
-# RCLRpx3wmpGaZgvtknGd8ObJYawWO6s8gay0JpQMs8GHUrbX2gOMtwilBYyF9dLK
-# pCqCVkJtZ9ZE6m2xBNNM6Un7pUSDXeKxRCQbek2qS8RZg5m7Qshp3mSHhYGfqiec
-# q5bmfpK22NG0/gkRW6olPyN72tbINerskDAiOw024d2YtC+1oZXNFIwvGf7+FAWR
-# NNQyvEnwSCzN9+0nO5cd7ggkzEXbeU1cEpY8H0pQivNoMVrPADkOIEyjGug19IsY
-# W4zXj7Ku0WlhwOEDO7T/6h9Bn4NTkPRb7DVXKbVtSaKtXL7omlO6UdHRRUPj
+# 9w0BCQMxDQYLKoZIhvcNAQkQAQQwHAYJKoZIhvcNAQkFMQ8XDTIzMDEyNzEzMzkw
+# MFowLwYJKoZIhvcNAQkEMSIEIL6hxVS3cJyZxZMUniPbpPaD72eeD6qHIiya5WmG
+# FUgjMDcGCyqGSIb3DQEJEAIvMSgwJjAkMCIEIMR0znYAfQI5Tg2l5N58FMaA+eKC
+# ATz+9lPvXbcf32H4MAsGCSqGSIb3DQEBAQSCAQB8lQhL6S9feMSy65IN8WkmOxuF
+# dSBOV2W5gB6FZXn/wJbBwB8T7JiacCiYnU4J11sEP6ivBWFEVeMtvZR6uu0SLwNB
+# 0//Dyrw5SaQvo2P66zzNon611hmMIjyFOpOo5Pd/k7VN6lbqyhufNuNbi2sbAWXJ
+# Y0WyfOnkI9/LJFEiKEsBTIJJ9YMea4Qo+2lWLWoiDlIvAbR2geeo0hqzbuyOpE5h
+# TQnXN8alXJebIHO7if6v415e/fvhKEItAdv5dOfwba8Wrr9PmvITb7lWNBCwpW4D
+# LtrINGph5OVh80mLsWmHfsg6rWkXwNaC6qTbLnoZFa4n828ofSzMogyvAbiE
 # SIG # End signature block
