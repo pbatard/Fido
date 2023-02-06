@@ -1,5 +1,5 @@
 ﻿#
-# Fido v1.42 - Feature ISO Downloader, for retail Windows images and UEFI Shell
+# Fido v1.43 - Feature ISO Downloader, for retail Windows images and UEFI Shell
 # Copyright © 2019-2023 Pete Batard <pete@akeo.ie>
 # Command line support: Copyright © 2021 flx5
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
@@ -45,9 +45,7 @@ param(
 	# (Optional) Only display the download URL [Toggles commandline mode]
 	[switch]$GetUrl = $False,
 	# (Optional) Increase verbosity
-	[switch]$Verbose = $False,
-	# (Optional) Disable the progress bar
-	[switch]$DisableProgress = $False
+	[switch]$Verbose = $False
 )
 #endregion
 
@@ -830,13 +828,11 @@ function Get-Windows-Download-Links([int]$SelectedVersion, [int]$SelectedRelease
 			$ref = "https://www.microsoft.com/software-download/windows11"
 			$r = Invoke-WebRequest -Method Post -Headers @{ "Referer" = $ref } -UseBasicParsing -UserAgent $UserAgent -WebSession $Session $url
 			if ($r -match "errorModalMessage") {
-				$regex = New-Object Text.RegularExpressions.Regex '<p id="errorModalMessage">(.+?)<\/p>'
-				$m = $regex.Match($r)
-				# Make the typical error message returned by Microsoft's servers more presentable
-				$Alt = $m.Groups[1] -replace "<[^>]+>" -replace "\s+", " "
-				$Alt += " " + $SessionId + "."
+				$Alt = [regex]::Match($r, '<p id="errorModalMessage">(.+?)<\/p>').Groups[1].Value -replace "<[^>]+>" -replace "\s+", " " -replace "\?\?\?", "-"
 				if (-not $Alt) {
 					$Alt = "Could not retrieve architectures from server"
+				} else {
+					$Alt += " " + $SessionId + "."
 				}
 				Throw-Error -Req $r -Alt $Alt
 			}
@@ -886,10 +882,7 @@ function Process-Download-Link([string]$Url)
 				$tmp_size = [uint64]::Parse($str_size)
 				$Size = Size-To-Human-Readable $tmp_size
 				Write-Host "Downloading '$File' ($Size)..."
-				if ($DisableProgress) {
-					$ProgressPreference = 'SilentlyContinue'
-				}
-				Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $File
+				Start-BitsTransfer -Source $Url -Destination $File
 			} else {
 				Write-Host Download Link: $Url
 				Start-Process -FilePath $Url
@@ -1218,8 +1211,8 @@ exit $ExitCode
 # SIG # Begin signature block
 # MIIkWAYJKoZIhvcNAQcCoIIkSTCCJEUCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDa8PrIe1NSjXqW
-# rwtj7a1ha0/FMIwXSDFruNwgp2G8haCCElkwggVvMIIEV6ADAgECAhBI/JO0YFWU
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAin+3j4moQLVFU
+# tqR8rGAmmgj13m89LOKayGbAncwfZqCCElkwggVvMIIEV6ADAgECAhBI/JO0YFWU
 # jTanyYqJ1pQWMA0GCSqGSIb3DQEBDAUAMHsxCzAJBgNVBAYTAkdCMRswGQYDVQQI
 # DBJHcmVhdGVyIE1hbmNoZXN0ZXIxEDAOBgNVBAcMB1NhbGZvcmQxGjAYBgNVBAoM
 # EUNvbW9kbyBDQSBMaW1pdGVkMSEwHwYDVQQDDBhBQUEgQ2VydGlmaWNhdGUgU2Vy
@@ -1322,22 +1315,22 @@ exit $ExitCode
 # aWMgQ29kZSBTaWduaW5nIENBIEVWIFIzNgIRAL+xUAG79ZLUlip3l+pzb6MwDQYJ
 # YIZIAWUDBAIBBQCgfDAQBgorBgEEAYI3AgEMMQIwADAZBgkqhkiG9w0BCQMxDAYK
 # KwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkqhkiG
-# 9w0BCQQxIgQgZt1L7FY2zlXGm+elfLNq4whr0tPpkCErcZFwHcLK42kwDQYJKoZI
-# hvcNAQEBBQAEggIAO7AqJKab0cMvAjNl+zVgKFQ9/8RSM1+6u9cJGz3boyIc8XHK
-# YnKrhVIelU4+iwcD+KIHfZK9R5p30PhKB34QpxarEQ1g7VBc+BMKwaFPcke/gPr6
-# hgIJZbvUogqVA9/evJjX1ulwyh5CSUosIYZUyXdV7t75PlbQ04ndzXtd1LUjPKp+
-# EGSOzObzpTzfrKKAH0T9IFafp5wV+w3Nt1KhT8UmpLEGuh0QURLp4YhYy/KmWo+2
-# wHeZsro7r1vS9J7099kD8+p1KnlgY63t2M3fY+5X7fPZ8jwGbFeEh0WyyzhNlqUd
-# Ut8F931EnwnXXA+Re1FRNFd00JjdpmFQpqkQHY5HKh6FAbAxBmOGM5Zv3mpmkVjS
-# 9VVoX3RaQMoXGduYIF8RnfKN6DV8OKc0V1D9NOPJcK/XZur6vow5Htpikj2Dyrdm
-# kvMiK+sqkDGsqhIdiAYHfa8Pq2bMfB/AQs4kcF3gkBaRwZQSLr9blWF6H5mL01Qq
-# YwCE3umpacP/P48PEDQ2kL4QYTvkIY8YL6Y81TXGfOxBj/EwQNalyaytln5+I7/0
-# nn1/nfriVU91cFvf1CYaId4xWqCTboC/49KtSN1cUMZsHFZggoPk5wNJZ/UIEAd3
-# 2K7NiWxbUQA3wDiNrymEgts3lg3zV5DWGgYosWottpzYfWBcZqiI/65JT42hgg48
+# 9w0BCQQxIgQgel+r/YQC+D0iNMGrveay91mPrAI0D8kUPZcul7Zh01kwDQYJKoZI
+# hvcNAQEBBQAEggIAnHvSbYCOjz/C743Fuk+AAnBU7WXRE4XbmpE90ECJyR+yO/tE
+# 3r3v/68pYQJrGZHKN6T+Y9iNVTIMHNYPLaBmPziQNASPcaLRWC3lz1dWAnDb1oCZ
+# m/IYpxr5rpt4p/9PRjaB1E1ERc3PZ/htdoqWPi/3EqdAo1UljGLUF2CI6X6DMJZB
+# hHYUP/PuD6RdKCO1OUo4HMuPGA7h3BnEp2uTPG0gBH4AiwViAkbMCJ0yVgsGzWU7
+# 6gNnTDXl5fS9pxyUKjfB9ckl2jynS56mfQOQYo4rM+NbYCBwl1pHyx3ZexojSRsG
+# 69k9TOY9L13h3zko7gafKOmQBJy950NEjgwdCq5UX7oQ1dN85Jgq+FI5DMsKqvcY
+# O55zddW0+ssrJsKaK78RQS7mZwbhmRJj592fPBFog8ba+/FsuYQH267wXirsqbej
+# USvzxAjVs2wAGGv/0A9L0eMvoTlKNP3tb0AiH34fN3R+KecVT9eZSJY6hidnRiVH
+# Op5oBHd+r1Dez3Lzgd7BVn70hWkxwA/1SNQDpABL/8/ZLBCjUe29JPjCnG71mwom
+# z9TSVtwJ+sCjUHnTzewRrQ0JIynnZoS5Id+tXLDh38lfVu9HvxNWciRrj95abV9V
+# HoE1a6hvNruqVKbjTTLvfUIDGZXIbbVSPEni1UTaeB91vnjkGOfBYOZdPW+hgg48
 # MIIOOAYKKwYBBAGCNwMDATGCDigwgg4kBgkqhkiG9w0BBwKggg4VMIIOEQIBAzEN
 # MAsGCWCGSAFlAwQCATCCAQ4GCyqGSIb3DQEJEAEEoIH+BIH7MIH4AgEBBgtghkgB
-# hvhFAQcXAzAxMA0GCWCGSAFlAwQCAQUABCBgeYfVPt15f69ZGlb0XMap8ogxbbm0
-# dx/FX6105nFxYQIUUU2TzURLgm2l56wAV0nbgxAYczMYDzIwMjMwMTI3MTUxMTUy
+# hvhFAQcXAzAxMA0GCWCGSAFlAwQCAQUABCCGqni2QlwqB21hyU6Rs+gDl1tPIOma
+# qMmxXDGtqTM4EAIUUqSQEpawBA8DWrWIdtuxvP7TczgYDzIwMjMwMjA2MDExOTI0
 # WjADAgEeoIGGpIGDMIGAMQswCQYDVQQGEwJVUzEdMBsGA1UEChMUU3ltYW50ZWMg
 # Q29ycG9yYXRpb24xHzAdBgNVBAsTFlN5bWFudGVjIFRydXN0IE5ldHdvcmsxMTAv
 # BgNVBAMTKFN5bWFudGVjIFNIQTI1NiBUaW1lU3RhbXBpbmcgU2lnbmVyIC0gRzOg
@@ -1401,13 +1394,13 @@ exit $ExitCode
 # A1UEChMUU3ltYW50ZWMgQ29ycG9yYXRpb24xHzAdBgNVBAsTFlN5bWFudGVjIFRy
 # dXN0IE5ldHdvcmsxKDAmBgNVBAMTH1N5bWFudGVjIFNIQTI1NiBUaW1lU3RhbXBp
 # bmcgQ0ECEHvU5a+6zAc/oQEjBCJBTRIwCwYJYIZIAWUDBAIBoIGkMBoGCSqGSIb3
-# DQEJAzENBgsqhkiG9w0BCRABBDAcBgkqhkiG9w0BCQUxDxcNMjMwMTI3MTUxMTUy
-# WjAvBgkqhkiG9w0BCQQxIgQgeeqIeo9Kcp71ZTFGCM4j8vvANl2gqXHGZO7PVGZz
-# 1ygwNwYLKoZIhvcNAQkQAi8xKDAmMCQwIgQgxHTOdgB9AjlODaXk3nwUxoD54oIB
-# PP72U+9dtx/fYfgwCwYJKoZIhvcNAQEBBIIBAAx1R1UnC8znHFbV2JkK+/UklEJH
-# 2vkucu8cyPp6TS84T5Zpf9+TYV1JLYy00bmkXFdsY4ioS+GRd+ocGpgv887bQXKw
-# 7xEP4ouQ2MR2/o4wakDTy4GqzxL2awZSSJvaHLKk1H5+gkvkNcYV/vTkHgkpcUwC
-# Qqfh4P5unQwnCsQwOVtzgjSbrmslS5ctac66Vvjs6/0ewnTYQncnA04Us5tR/UPH
-# bWSajMeLGp4E1k/sWWU9V7+uiQqx1wo5Qs6AjXkEu0NpfFGgUM1Js7X4cRUpWumM
-# /q23yClpxUHiDHPA1nhOHLuHlgn8RZwEdTB6ZOD0JIRVp3RpZ9Q+Qlu34qc=
+# DQEJAzENBgsqhkiG9w0BCRABBDAcBgkqhkiG9w0BCQUxDxcNMjMwMjA2MDExOTI0
+# WjAvBgkqhkiG9w0BCQQxIgQgLweTPLKPtanJVxxrIuCqGzru3xtAintj/2W8Y+R8
+# nXwwNwYLKoZIhvcNAQkQAi8xKDAmMCQwIgQgxHTOdgB9AjlODaXk3nwUxoD54oIB
+# PP72U+9dtx/fYfgwCwYJKoZIhvcNAQEBBIIBAE4XHtLfg6sAuof9wFzniSPNmYks
+# BPkufnx3wPWvzQECIQ1cmfDDHh8TjPENpMpmosJz6WVtAOjlVlrgFfT/A/5J8fh5
+# vj7vdDHhkW+PozQyKJI2UROJrFyo1ZbD8fHIgBGalHT9PD+/BoN3yps6vLvgVUWX
+# +mMdH7g1gwcHvmLl2ocmPANNR7gfdw/8BUtLlnK5Jgta3DANEh/A7Wedo1Gt4ctN
+# NVC2g3Vs1BhyF8EJj274wtQuSC/9Q9SoBQhrnBYD/pElwOkFCQB+VFAP0TOnyqvS
+# YO9QM5G3Xd31TRkW9i83G1SNMhKf0du/voqtplcIEMqXfYGdagtzY+qSf1c=
 # SIG # End signature block

@@ -87,7 +87,6 @@ The options are:
    architecture as the one from the current system.
 - `GetUrl`: By default, the script attempts to automatically launch the download. But when using the `-GetUrl` switch,
    the script only displays the download URL, which can then be piped into another command or into a file.
-- `DisableProgress`: Disable progress report. This may speed up downloads when using the command line.
 
 Examples of a commandline download:
 
