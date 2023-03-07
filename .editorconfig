@@ -5,5 +5,5 @@ root = true
 # Must use a BOM else Unicode strings will not display
 charset = utf-8-bom
 insert_final_newline = true
-indent_style = space
+indent_style = tab
 trim_trailing_whitespace = true

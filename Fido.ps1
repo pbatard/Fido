@@ -1,5 +1,5 @@
 ﻿#
-# Fido v1.43 - Feature ISO Downloader, for retail Windows images and UEFI Shell
+# Fido v1.44 - Feature ISO Downloader, for retail Windows images and UEFI Shell
 # Copyright © 2019-2023 Pete Batard <pete@akeo.ie>
 # Command line support: Copyright © 2021 flx5
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
@@ -58,8 +58,22 @@ if ($Win -or $Rel -or $Ed -or $Lang -or $Arch -or $GetUrl) {
 	$Cmd = $True
 }
 
-# Craft a decimal numeric version of Windows, since Windows 7's PowerShell is too stupid to compare it to a Version object
-$winver = [System.Environment]::OSVersion.Version.Major * 1.0 + [System.Environment]::OSVersion.Version.Minor * 0.1
+# Return a decimal Windows version that we can then check for platform support.
+# Note that because we don't want to have to support this script on anything
+# other than Windows, this call returns 0.0 for PowerShell running on Linux/Mac.
+function Get-Platform-Version()
+{
+	$version = 0.0
+	$platform = [string][System.Environment]::OSVersion.Platform
+	# This will filter out non Windows platforms
+	if ($platform.StartsWith("Win")) {
+		# Craft a decimal numeric version of Windows
+		$version = [System.Environment]::OSVersion.Version.Major * 1.0 + [System.Environment]::OSVersion.Version.Minor * 0.1
+	}
+	return $version
+}
+
+$winver = Get-Platform-Version
 
 # The default TLS for Windows 8.x doesn't work with Microsoft's servers so we must force it
 if ($winver -lt 10.0) {
@@ -319,7 +333,7 @@ $WindowsVersions = @(
 		)
 	),
 	@(
-		@("UEFI Shell 2.0", "UEFI_SHELL 2.0"),	
+		@("UEFI Shell 2.0", "UEFI_SHELL 2.0"),
 		@(
 			"4.632 [20100426]",
 			@("Release", 0)
@@ -625,7 +639,7 @@ if ($Cmd) {
 $EnglishMessages = "en-US|Version|Release|Edition|Language|Architecture|Download|Continue|Back|Close|Cancel|Error|Please wait...|" +
 	"Download using a browser|Download of Windows ISOs is unavailable due to Microsoft having altered their website to prevent it.|" +
 	"PowerShell 3.0 or later is required to run this script.|Do you want to go online and download it?|" +
-	"This feature is not available for this version of Windows."
+	"This feature is not available on this platform."
 [string[]]$English = $EnglishMessages.Split('|')
 [string[]]$Localized = $null
 if ($LocData -and (-not $LocData.StartsWith("en-US"))) {
@@ -655,7 +669,8 @@ function Size-To-Human-Readable([uint64]$size)
 }
 
 # Check if the locale we want is available - Fall back to en-US otherwise
-function Check-Locale {
+function Check-Locale
+{
 	try {
 		$url = "https://www.microsoft.com/" + $QueryLocale + "/software-download/"
 		if ($Verbosity -ge 2) {
@@ -792,7 +807,7 @@ function Get-Windows-Download-Links([int]$SelectedVersion, [int]$SelectedRelease
 			$xml = New-Object System.Xml.XmlDocument
 			if ($Verbosity -ge 2) {
 				Write-Host Querying $url
-			}			
+			}
 			$xml.Load($url)
 			$sep = ""
 			$archs = ""
@@ -903,9 +918,9 @@ if ($Cmd) {
 	$winLanguageName = $null
 	$winLink = $null
 
-	# Windows 7 has become too much of a liability
+	# Windows 7 and non Windows platforms are too much of a liability
 	if ($winver -le 6.1) {
-		Error(Get-Translation("This feature is not available for this version of Windows."))
+		Error(Get-Translation("This feature is not available on this platform."))
 		exit 403
 	}
 
@@ -1076,9 +1091,9 @@ $WindowsVersionTitle.Text = Get-Translation("Version")
 $Continue.Content = Get-Translation("Continue")
 $Back.Content = Get-Translation("Close")
 
-# Windows 7 has become too much of a liability
+# Windows 7 and non Windows platforms are too much of a liability
 if ($winver -le 6.1) {
-	Error(Get-Translation("This feature is not available for this version of Windows."))
+	Error(Get-Translation("This feature is not available on this platform."))
 	exit 403
 }
 
@@ -1209,10 +1224,10 @@ $XMLForm.ShowDialog() | Out-Null
 exit $ExitCode
 
 # SIG # Begin signature block
-# MIIkWAYJKoZIhvcNAQcCoIIkSTCCJEUCAQExDzANBglghkgBZQMEAgEFADB5Bgor
+# MIIkWQYJKoZIhvcNAQcCoIIkSjCCJEYCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAin+3j4moQLVFU
-# tqR8rGAmmgj13m89LOKayGbAncwfZqCCElkwggVvMIIEV6ADAgECAhBI/JO0YFWU
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDCpZpntjuU2uHY
+# z3/0OsY2UtUKjz1UjCN6T8dRzpny96CCElkwggVvMIIEV6ADAgECAhBI/JO0YFWU
 # jTanyYqJ1pQWMA0GCSqGSIb3DQEBDAUAMHsxCzAJBgNVBAYTAkdCMRswGQYDVQQI
 # DBJHcmVhdGVyIE1hbmNoZXN0ZXIxEDAOBgNVBAcMB1NhbGZvcmQxGjAYBgNVBAoM
 # EUNvbW9kbyBDQSBMaW1pdGVkMSEwHwYDVQQDDBhBQUEgQ2VydGlmaWNhdGUgU2Vy
@@ -1310,97 +1325,97 @@ exit $ExitCode
 # QTYOb9goARWPNlkKbyF9bndu5kLWIlZcOS7IIznOcS4y1J5ZJewBRH4kbuNfCbSl
 # HMZS/rmpFprXXFdje6TRXwgvBs6UOR1zTe5ycumyo5FYBVEFGR1Ps6ZC3z62yLPk
 # pb5YSma1/ut/KplOxOnK74ELd/vTS2i10qmsqP5+m+U2jznmCEwm8g8V1mg94acL
-# iyM9uR5+U3y6OrVRkMnG9K9ZuTGCEVUwghFRAgEBMGwwVzELMAkGA1UEBhMCR0Ix
+# iyM9uR5+U3y6OrVRkMnG9K9ZuTGCEVYwghFSAgEBMGwwVzELMAkGA1UEBhMCR0Ix
 # GDAWBgNVBAoTD1NlY3RpZ28gTGltaXRlZDEuMCwGA1UEAxMlU2VjdGlnbyBQdWJs
 # aWMgQ29kZSBTaWduaW5nIENBIEVWIFIzNgIRAL+xUAG79ZLUlip3l+pzb6MwDQYJ
 # YIZIAWUDBAIBBQCgfDAQBgorBgEEAYI3AgEMMQIwADAZBgkqhkiG9w0BCQMxDAYK
 # KwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkqhkiG
-# 9w0BCQQxIgQgel+r/YQC+D0iNMGrveay91mPrAI0D8kUPZcul7Zh01kwDQYJKoZI
-# hvcNAQEBBQAEggIAnHvSbYCOjz/C743Fuk+AAnBU7WXRE4XbmpE90ECJyR+yO/tE
-# 3r3v/68pYQJrGZHKN6T+Y9iNVTIMHNYPLaBmPziQNASPcaLRWC3lz1dWAnDb1oCZ
-# m/IYpxr5rpt4p/9PRjaB1E1ERc3PZ/htdoqWPi/3EqdAo1UljGLUF2CI6X6DMJZB
-# hHYUP/PuD6RdKCO1OUo4HMuPGA7h3BnEp2uTPG0gBH4AiwViAkbMCJ0yVgsGzWU7
-# 6gNnTDXl5fS9pxyUKjfB9ckl2jynS56mfQOQYo4rM+NbYCBwl1pHyx3ZexojSRsG
-# 69k9TOY9L13h3zko7gafKOmQBJy950NEjgwdCq5UX7oQ1dN85Jgq+FI5DMsKqvcY
-# O55zddW0+ssrJsKaK78RQS7mZwbhmRJj592fPBFog8ba+/FsuYQH267wXirsqbej
-# USvzxAjVs2wAGGv/0A9L0eMvoTlKNP3tb0AiH34fN3R+KecVT9eZSJY6hidnRiVH
-# Op5oBHd+r1Dez3Lzgd7BVn70hWkxwA/1SNQDpABL/8/ZLBCjUe29JPjCnG71mwom
-# z9TSVtwJ+sCjUHnTzewRrQ0JIynnZoS5Id+tXLDh38lfVu9HvxNWciRrj95abV9V
-# HoE1a6hvNruqVKbjTTLvfUIDGZXIbbVSPEni1UTaeB91vnjkGOfBYOZdPW+hgg48
-# MIIOOAYKKwYBBAGCNwMDATGCDigwgg4kBgkqhkiG9w0BBwKggg4VMIIOEQIBAzEN
-# MAsGCWCGSAFlAwQCATCCAQ4GCyqGSIb3DQEJEAEEoIH+BIH7MIH4AgEBBgtghkgB
-# hvhFAQcXAzAxMA0GCWCGSAFlAwQCAQUABCCGqni2QlwqB21hyU6Rs+gDl1tPIOma
-# qMmxXDGtqTM4EAIUUqSQEpawBA8DWrWIdtuxvP7TczgYDzIwMjMwMjA2MDExOTI0
-# WjADAgEeoIGGpIGDMIGAMQswCQYDVQQGEwJVUzEdMBsGA1UEChMUU3ltYW50ZWMg
-# Q29ycG9yYXRpb24xHzAdBgNVBAsTFlN5bWFudGVjIFRydXN0IE5ldHdvcmsxMTAv
-# BgNVBAMTKFN5bWFudGVjIFNIQTI1NiBUaW1lU3RhbXBpbmcgU2lnbmVyIC0gRzOg
-# ggqLMIIFODCCBCCgAwIBAgIQewWx1EloUUT3yYnSnBmdEjANBgkqhkiG9w0BAQsF
-# ADCBvTELMAkGA1UEBhMCVVMxFzAVBgNVBAoTDlZlcmlTaWduLCBJbmMuMR8wHQYD
-# VQQLExZWZXJpU2lnbiBUcnVzdCBOZXR3b3JrMTowOAYDVQQLEzEoYykgMjAwOCBW
-# ZXJpU2lnbiwgSW5jLiAtIEZvciBhdXRob3JpemVkIHVzZSBvbmx5MTgwNgYDVQQD
-# Ey9WZXJpU2lnbiBVbml2ZXJzYWwgUm9vdCBDZXJ0aWZpY2F0aW9uIEF1dGhvcml0
-# eTAeFw0xNjAxMTIwMDAwMDBaFw0zMTAxMTEyMzU5NTlaMHcxCzAJBgNVBAYTAlVT
-# MR0wGwYDVQQKExRTeW1hbnRlYyBDb3Jwb3JhdGlvbjEfMB0GA1UECxMWU3ltYW50
-# ZWMgVHJ1c3QgTmV0d29yazEoMCYGA1UEAxMfU3ltYW50ZWMgU0hBMjU2IFRpbWVT
-# dGFtcGluZyBDQTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBALtZnVlV
-# T52Mcl0agaLrVfOwAa08cawyjwVrhponADKXak3JZBRLKbvC2Sm5Luxjs+HPPwtW
-# kPhiG37rpgfi3n9ebUA41JEG50F8eRzLy60bv9iVkfPw7mz4rZY5Ln/BJ7h4OcWE
-# pe3tr4eOzo3HberSmLU6Hx45ncP0mqj0hOHE0XxxxgYptD/kgw0mw3sIPk35Crcz
-# Sf/KO9T1sptL4YiZGvXA6TMU1t/HgNuR7v68kldyd/TNqMz+CfWTN76ViGrF3PSx
-# S9TO6AmRX7WEeTWKeKwZMo8jwTJBG1kOqT6xzPnWK++32OTVHW0ROpL2k8mc40ju
-# u1MO1DaXhnjFoTcCAwEAAaOCAXcwggFzMA4GA1UdDwEB/wQEAwIBBjASBgNVHRMB
-# Af8ECDAGAQH/AgEAMGYGA1UdIARfMF0wWwYLYIZIAYb4RQEHFwMwTDAjBggrBgEF
-# BQcCARYXaHR0cHM6Ly9kLnN5bWNiLmNvbS9jcHMwJQYIKwYBBQUHAgIwGRoXaHR0
-# cHM6Ly9kLnN5bWNiLmNvbS9ycGEwLgYIKwYBBQUHAQEEIjAgMB4GCCsGAQUFBzAB
-# hhJodHRwOi8vcy5zeW1jZC5jb20wNgYDVR0fBC8wLTAroCmgJ4YlaHR0cDovL3Mu
-# c3ltY2IuY29tL3VuaXZlcnNhbC1yb290LmNybDATBgNVHSUEDDAKBggrBgEFBQcD
-# CDAoBgNVHREEITAfpB0wGzEZMBcGA1UEAxMQVGltZVN0YW1wLTIwNDgtMzAdBgNV
-# HQ4EFgQUr2PWyqNOhXLgp7xB8ymiOH+AdWIwHwYDVR0jBBgwFoAUtnf6aUhHn1MS
-# 1cLqBzJ2B9GXBxkwDQYJKoZIhvcNAQELBQADggEBAHXqsC3VNBlcMkX+DuHUT6Z4
-# wW/X6t3cT/OhyIGI96ePFeZAKa3mXfSi2VZkhHEwKt0eYRdmIFYGmBmNXXHy+Je8
-# Cf0ckUfJ4uiNA/vMkC/WCmxOM+zWtJPITJBjSDlAIcTd1m6JmDy1mJfoqQa3CcmP
-# U1dBkC/hHk1O3MoQeGxCbvC2xfhhXFL1TvZrjfdKer7zzf0D19n2A6gP41P3CnXs
-# xnUuqmaFBJm3+AZX4cYO9uiv2uybGB+queM6AL/OipTLAduexzi7D1Kr0eOUA2AK
-# TaD+J20UMvw/l0Dhv5mJ2+Q5FL3a5NPD6itas5VYVQR9x5rsIwONhSrS/66pYYEw
-# ggVLMIIEM6ADAgECAhB71OWvuswHP6EBIwQiQU0SMA0GCSqGSIb3DQEBCwUAMHcx
-# CzAJBgNVBAYTAlVTMR0wGwYDVQQKExRTeW1hbnRlYyBDb3Jwb3JhdGlvbjEfMB0G
-# A1UECxMWU3ltYW50ZWMgVHJ1c3QgTmV0d29yazEoMCYGA1UEAxMfU3ltYW50ZWMg
-# U0hBMjU2IFRpbWVTdGFtcGluZyBDQTAeFw0xNzEyMjMwMDAwMDBaFw0yOTAzMjIy
-# MzU5NTlaMIGAMQswCQYDVQQGEwJVUzEdMBsGA1UEChMUU3ltYW50ZWMgQ29ycG9y
-# YXRpb24xHzAdBgNVBAsTFlN5bWFudGVjIFRydXN0IE5ldHdvcmsxMTAvBgNVBAMT
-# KFN5bWFudGVjIFNIQTI1NiBUaW1lU3RhbXBpbmcgU2lnbmVyIC0gRzMwggEiMA0G
-# CSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCvDoqq+Ny/aXtUF3FHCb2NPIH4dBV3
-# Z5Cc/d5OAp5LdvblNj5l1SQgbTD53R2D6T8nSjNObRaK5I1AjSKqvqcLG9IHtjy1
-# GiQo+BtyUT3ICYgmCDr5+kMjdUdwDLNfW48IHXJIV2VNrwI8QPf03TI4kz/lLKbz
-# WSPLgN4TTfkQyaoKGGxVYVfR8QIsxLWr8mwj0p8NDxlsrYViaf1OhcGKUjGrW9jJ
-# dFLjV2wiv1V/b8oGqz9KtyJ2ZezsNvKWlYEmLP27mKoBONOvJUCbCVPwKVeFWF7q
-# hUhBIYfl3rTTJrJ7QFNYeY5SMQZNlANFxM48A+y3API6IsW0b+XvsIqbAgMBAAGj
-# ggHHMIIBwzAMBgNVHRMBAf8EAjAAMGYGA1UdIARfMF0wWwYLYIZIAYb4RQEHFwMw
-# TDAjBggrBgEFBQcCARYXaHR0cHM6Ly9kLnN5bWNiLmNvbS9jcHMwJQYIKwYBBQUH
-# AgIwGRoXaHR0cHM6Ly9kLnN5bWNiLmNvbS9ycGEwQAYDVR0fBDkwNzA1oDOgMYYv
-# aHR0cDovL3RzLWNybC53cy5zeW1hbnRlYy5jb20vc2hhMjU2LXRzcy1jYS5jcmww
-# FgYDVR0lAQH/BAwwCgYIKwYBBQUHAwgwDgYDVR0PAQH/BAQDAgeAMHcGCCsGAQUF
-# BwEBBGswaTAqBggrBgEFBQcwAYYeaHR0cDovL3RzLW9jc3Aud3Muc3ltYW50ZWMu
-# Y29tMDsGCCsGAQUFBzAChi9odHRwOi8vdHMtYWlhLndzLnN5bWFudGVjLmNvbS9z
-# aGEyNTYtdHNzLWNhLmNlcjAoBgNVHREEITAfpB0wGzEZMBcGA1UEAxMQVGltZVN0
-# YW1wLTIwNDgtNjAdBgNVHQ4EFgQUpRMBqZ+FzBtuFh5fOzGqeTYAex0wHwYDVR0j
-# BBgwFoAUr2PWyqNOhXLgp7xB8ymiOH+AdWIwDQYJKoZIhvcNAQELBQADggEBAEae
-# r/C4ol+imUjPqCdLIc2yuaZycGMv41UpezlGTud+ZQZYi7xXipINCNgQujYk+gp7
-# +zvTYr9KlBXmgtuKVG3/KP5nz3E/5jMJ2aJZEPQeSv5lzN7Ua+NSKXUASiulzMub
-# 6KlN97QXWZJBw7c/hub2wH9EPEZcF1rjpDvVaSbVIX3hgGd+Yqy3Ti4VmuWcI69b
-# EepxqUH5DXk4qaENz7Sx2j6aescixXTN30cJhsT8kSWyG5bphQjo3ep0YG5gpVZ6
-# DchEWNzm+UgUnuW/3gC9d7GYFHIUJN/HESwfAD/DSxTGZxzMHgajkF9cVIs+4zNb
-# gg/Ft4YCTnGf6WZFP3YxggJaMIICVgIBATCBizB3MQswCQYDVQQGEwJVUzEdMBsG
-# A1UEChMUU3ltYW50ZWMgQ29ycG9yYXRpb24xHzAdBgNVBAsTFlN5bWFudGVjIFRy
-# dXN0IE5ldHdvcmsxKDAmBgNVBAMTH1N5bWFudGVjIFNIQTI1NiBUaW1lU3RhbXBp
-# bmcgQ0ECEHvU5a+6zAc/oQEjBCJBTRIwCwYJYIZIAWUDBAIBoIGkMBoGCSqGSIb3
-# DQEJAzENBgsqhkiG9w0BCRABBDAcBgkqhkiG9w0BCQUxDxcNMjMwMjA2MDExOTI0
-# WjAvBgkqhkiG9w0BCQQxIgQgLweTPLKPtanJVxxrIuCqGzru3xtAintj/2W8Y+R8
-# nXwwNwYLKoZIhvcNAQkQAi8xKDAmMCQwIgQgxHTOdgB9AjlODaXk3nwUxoD54oIB
-# PP72U+9dtx/fYfgwCwYJKoZIhvcNAQEBBIIBAE4XHtLfg6sAuof9wFzniSPNmYks
-# BPkufnx3wPWvzQECIQ1cmfDDHh8TjPENpMpmosJz6WVtAOjlVlrgFfT/A/5J8fh5
-# vj7vdDHhkW+PozQyKJI2UROJrFyo1ZbD8fHIgBGalHT9PD+/BoN3yps6vLvgVUWX
-# +mMdH7g1gwcHvmLl2ocmPANNR7gfdw/8BUtLlnK5Jgta3DANEh/A7Wedo1Gt4ctN
-# NVC2g3Vs1BhyF8EJj274wtQuSC/9Q9SoBQhrnBYD/pElwOkFCQB+VFAP0TOnyqvS
-# YO9QM5G3Xd31TRkW9i83G1SNMhKf0du/voqtplcIEMqXfYGdagtzY+qSf1c=
+# 9w0BCQQxIgQgH+Kly8R4u5iFMlpWglzfc5lMDQgs38C2FS0CujFgfdMwDQYJKoZI
+# hvcNAQEBBQAEggIAqDdE38CiBnf6ksVoNbp+EAUi5M1rD/b885OIuaXqUUjCMOaR
+# R34hPylb/Lc9CbCJ1aiqjhyap/hnNryeXBSkr+HIfP5UyDGXjCsfFFwyPVyRPd72
+# BKM8tYfuUvZbIvWmsFUJfe24VTEGTbh5XTM5s6RgQCQZ4V/M6ePCH6LxiHuIufWL
+# DCaKS6/AO0icPkF0CtQQiGk/z0nlrp6T6IppDkGS7yAYip5/flBxmQsRCkNlL9mw
+# XTL63kd1ar9cZTR1knAXwM2qXfkkOxGX8OGQ04P01/wWjEBMoYBUmUbHIWKgcg1T
+# QmXZEObFJHRkNMfPU+F+oc/kDwd4SXCv6x7E6XOgxB4C9B9sE88ZEOOv26FTS4fa
+# +VVFPffxfmdQT+pKch8j3h/OGgJM2OAqnEoK8KTZYlCoJO781YfAjertrewXKHv/
+# HzlJ7gu5t3Ji7WrzoCusHEszv+LYl3TupZ2VZNmQDY57/br3LxNHOxRmjFAigI6z
+# 3OyVwOx6L+onBr+jg5LGkA+XPhTjdAhBJ2bI9ayUYURKv5/jNUbyk6RZHUncTKUj
+# Oze0eaX15F/UpGbJZaR9wCCj28jCk4zxbqSTqQcSjxM8zfp23fcxd2NICtd8UhFt
+# pGfR1jleAJsKuDJts+k8WcfT2SaEGQmmklM/wIusRaIWn6KHr8wAFBgz8huhgg49
+# MIIOOQYKKwYBBAGCNwMDATGCDikwgg4lBgkqhkiG9w0BBwKggg4WMIIOEgIBAzEN
+# MAsGCWCGSAFlAwQCATCCAQ8GCyqGSIb3DQEJEAEEoIH/BIH8MIH5AgEBBgtghkgB
+# hvhFAQcXAzAxMA0GCWCGSAFlAwQCAQUABCBIdB9A36e59U63AWbaDgc60655s3pE
+# PaBLt9XKx9DWuQIVAKmmRn4m0Gad1QsRv95QHHuKDBOzGA8yMDIzMDMwNzEyMTEz
+# MFowAwIBHqCBhqSBgzCBgDELMAkGA1UEBhMCVVMxHTAbBgNVBAoTFFN5bWFudGVj
+# IENvcnBvcmF0aW9uMR8wHQYDVQQLExZTeW1hbnRlYyBUcnVzdCBOZXR3b3JrMTEw
+# LwYDVQQDEyhTeW1hbnRlYyBTSEEyNTYgVGltZVN0YW1waW5nIFNpZ25lciAtIEcz
+# oIIKizCCBTgwggQgoAMCAQICEHsFsdRJaFFE98mJ0pwZnRIwDQYJKoZIhvcNAQEL
+# BQAwgb0xCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5WZXJpU2lnbiwgSW5jLjEfMB0G
+# A1UECxMWVmVyaVNpZ24gVHJ1c3QgTmV0d29yazE6MDgGA1UECxMxKGMpIDIwMDgg
+# VmVyaVNpZ24sIEluYy4gLSBGb3IgYXV0aG9yaXplZCB1c2Ugb25seTE4MDYGA1UE
+# AxMvVmVyaVNpZ24gVW5pdmVyc2FsIFJvb3QgQ2VydGlmaWNhdGlvbiBBdXRob3Jp
+# dHkwHhcNMTYwMTEyMDAwMDAwWhcNMzEwMTExMjM1OTU5WjB3MQswCQYDVQQGEwJV
+# UzEdMBsGA1UEChMUU3ltYW50ZWMgQ29ycG9yYXRpb24xHzAdBgNVBAsTFlN5bWFu
+# dGVjIFRydXN0IE5ldHdvcmsxKDAmBgNVBAMTH1N5bWFudGVjIFNIQTI1NiBUaW1l
+# U3RhbXBpbmcgQ0EwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC7WZ1Z
+# VU+djHJdGoGi61XzsAGtPHGsMo8Fa4aaJwAyl2pNyWQUSym7wtkpuS7sY7Phzz8L
+# VpD4Yht+66YH4t5/Xm1AONSRBudBfHkcy8utG7/YlZHz8O5s+K2WOS5/wSe4eDnF
+# hKXt7a+Hjs6Nx23q0pi1Oh8eOZ3D9Jqo9IThxNF8ccYGKbQ/5IMNJsN7CD5N+Qq3
+# M0n/yjvU9bKbS+GImRr1wOkzFNbfx4Dbke7+vJJXcnf0zajM/gn1kze+lYhqxdz0
+# sUvUzugJkV+1hHk1inisGTKPI8EyQRtZDqk+scz51ivvt9jk1R1tETqS9pPJnONI
+# 7rtTDtQ2l4Z4xaE3AgMBAAGjggF3MIIBczAOBgNVHQ8BAf8EBAMCAQYwEgYDVR0T
+# AQH/BAgwBgEB/wIBADBmBgNVHSAEXzBdMFsGC2CGSAGG+EUBBxcDMEwwIwYIKwYB
+# BQUHAgEWF2h0dHBzOi8vZC5zeW1jYi5jb20vY3BzMCUGCCsGAQUFBwICMBkaF2h0
+# dHBzOi8vZC5zeW1jYi5jb20vcnBhMC4GCCsGAQUFBwEBBCIwIDAeBggrBgEFBQcw
+# AYYSaHR0cDovL3Muc3ltY2QuY29tMDYGA1UdHwQvMC0wK6ApoCeGJWh0dHA6Ly9z
+# LnN5bWNiLmNvbS91bml2ZXJzYWwtcm9vdC5jcmwwEwYDVR0lBAwwCgYIKwYBBQUH
+# AwgwKAYDVR0RBCEwH6QdMBsxGTAXBgNVBAMTEFRpbWVTdGFtcC0yMDQ4LTMwHQYD
+# VR0OBBYEFK9j1sqjToVy4Ke8QfMpojh/gHViMB8GA1UdIwQYMBaAFLZ3+mlIR59T
+# EtXC6gcydgfRlwcZMA0GCSqGSIb3DQEBCwUAA4IBAQB16rAt1TQZXDJF/g7h1E+m
+# eMFv1+rd3E/zociBiPenjxXmQCmt5l30otlWZIRxMCrdHmEXZiBWBpgZjV1x8viX
+# vAn9HJFHyeLojQP7zJAv1gpsTjPs1rSTyEyQY0g5QCHE3dZuiZg8tZiX6KkGtwnJ
+# j1NXQZAv4R5NTtzKEHhsQm7wtsX4YVxS9U72a433Snq+8839A9fZ9gOoD+NT9wp1
+# 7MZ1LqpmhQSZt/gGV+HGDvbor9rsmxgfqrnjOgC/zoqUywHbnsc4uw9Sq9HjlANg
+# Ck2g/idtFDL8P5dA4b+ZidvkORS92uTTw+orWrOVWFUEfcea7CMDjYUq0v+uqWGB
+# MIIFSzCCBDOgAwIBAgIQe9Tlr7rMBz+hASMEIkFNEjANBgkqhkiG9w0BAQsFADB3
+# MQswCQYDVQQGEwJVUzEdMBsGA1UEChMUU3ltYW50ZWMgQ29ycG9yYXRpb24xHzAd
+# BgNVBAsTFlN5bWFudGVjIFRydXN0IE5ldHdvcmsxKDAmBgNVBAMTH1N5bWFudGVj
+# IFNIQTI1NiBUaW1lU3RhbXBpbmcgQ0EwHhcNMTcxMjIzMDAwMDAwWhcNMjkwMzIy
+# MjM1OTU5WjCBgDELMAkGA1UEBhMCVVMxHTAbBgNVBAoTFFN5bWFudGVjIENvcnBv
+# cmF0aW9uMR8wHQYDVQQLExZTeW1hbnRlYyBUcnVzdCBOZXR3b3JrMTEwLwYDVQQD
+# EyhTeW1hbnRlYyBTSEEyNTYgVGltZVN0YW1waW5nIFNpZ25lciAtIEczMIIBIjAN
+# BgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArw6Kqvjcv2l7VBdxRwm9jTyB+HQV
+# d2eQnP3eTgKeS3b25TY+ZdUkIG0w+d0dg+k/J0ozTm0WiuSNQI0iqr6nCxvSB7Y8
+# tRokKPgbclE9yAmIJgg6+fpDI3VHcAyzX1uPCB1ySFdlTa8CPED39N0yOJM/5Sym
+# 81kjy4DeE035EMmqChhsVWFX0fECLMS1q/JsI9KfDQ8ZbK2FYmn9ToXBilIxq1vY
+# yXRS41dsIr9Vf2/KBqs/SrcidmXs7DbylpWBJiz9u5iqATjTryVAmwlT8ClXhVhe
+# 6oVIQSGH5d600yaye0BTWHmOUjEGTZQDRcTOPAPstwDyOiLFtG/l77CKmwIDAQAB
+# o4IBxzCCAcMwDAYDVR0TAQH/BAIwADBmBgNVHSAEXzBdMFsGC2CGSAGG+EUBBxcD
+# MEwwIwYIKwYBBQUHAgEWF2h0dHBzOi8vZC5zeW1jYi5jb20vY3BzMCUGCCsGAQUF
+# BwICMBkaF2h0dHBzOi8vZC5zeW1jYi5jb20vcnBhMEAGA1UdHwQ5MDcwNaAzoDGG
+# L2h0dHA6Ly90cy1jcmwud3Muc3ltYW50ZWMuY29tL3NoYTI1Ni10c3MtY2EuY3Js
+# MBYGA1UdJQEB/wQMMAoGCCsGAQUFBwMIMA4GA1UdDwEB/wQEAwIHgDB3BggrBgEF
+# BQcBAQRrMGkwKgYIKwYBBQUHMAGGHmh0dHA6Ly90cy1vY3NwLndzLnN5bWFudGVj
+# LmNvbTA7BggrBgEFBQcwAoYvaHR0cDovL3RzLWFpYS53cy5zeW1hbnRlYy5jb20v
+# c2hhMjU2LXRzcy1jYS5jZXIwKAYDVR0RBCEwH6QdMBsxGTAXBgNVBAMTEFRpbWVT
+# dGFtcC0yMDQ4LTYwHQYDVR0OBBYEFKUTAamfhcwbbhYeXzsxqnk2AHsdMB8GA1Ud
+# IwQYMBaAFK9j1sqjToVy4Ke8QfMpojh/gHViMA0GCSqGSIb3DQEBCwUAA4IBAQBG
+# nq/wuKJfoplIz6gnSyHNsrmmcnBjL+NVKXs5Rk7nfmUGWIu8V4qSDQjYELo2JPoK
+# e/s702K/SpQV5oLbilRt/yj+Z89xP+YzCdmiWRD0Hkr+Zcze1GvjUil1AEorpczL
+# m+ipTfe0F1mSQcO3P4bm9sB/RDxGXBda46Q71Wkm1SF94YBnfmKst04uFZrlnCOv
+# WxHqcalB+Q15OKmhDc+0sdo+mnrHIsV0zd9HCYbE/JElshuW6YUI6N3qdGBuYKVW
+# eg3IRFjc5vlIFJ7lv94AvXexmBRyFCTfxxEsHwA/w0sUxmcczB4Go5BfXFSLPuMz
+# W4IPxbeGAk5xn+lmRT92MYICWjCCAlYCAQEwgYswdzELMAkGA1UEBhMCVVMxHTAb
+# BgNVBAoTFFN5bWFudGVjIENvcnBvcmF0aW9uMR8wHQYDVQQLExZTeW1hbnRlYyBU
+# cnVzdCBOZXR3b3JrMSgwJgYDVQQDEx9TeW1hbnRlYyBTSEEyNTYgVGltZVN0YW1w
+# aW5nIENBAhB71OWvuswHP6EBIwQiQU0SMAsGCWCGSAFlAwQCAaCBpDAaBgkqhkiG
+# 9w0BCQMxDQYLKoZIhvcNAQkQAQQwHAYJKoZIhvcNAQkFMQ8XDTIzMDMwNzEyMTEz
+# MFowLwYJKoZIhvcNAQkEMSIEIBi+xZssYhAdmjF0gLXZv2WCNOM3iW02zqjWyiHi
+# 3ZVhMDcGCyqGSIb3DQEJEAIvMSgwJjAkMCIEIMR0znYAfQI5Tg2l5N58FMaA+eKC
+# ATz+9lPvXbcf32H4MAsGCSqGSIb3DQEBAQSCAQAQ/Kq0P6rLFJ66lXNqtLxRuZtB
+# MUMdYUhBiKy3RCJwf1SMi4nhV/aHEw43hQz+GsxrxENwy24VFfxOg6kguqI1Qm0b
+# w5+rCqFykHUntTAsIND27MthzzXn69wkoFv0n2IKjq05KuUEXgEy+eemStG1G0tU
+# efXWl2eFR+8ItErCzAi7Dt7R76vhRG7Sj1Ik2PlltdnK0+SuSdLfeVbTrrYQ2Kub
+# ueVJWMFFE4CX0LvFJ6fdytVVqTD8GXNj/bdt2La5zLEobYoQXHzXwJHXGY+Nj9d8
+# 5fiYgMP7RA04944Xjkoc761EySwFWPHNJjg8DTSAz+NKrnFdvb9K3hoik1wT
 # SIG # End signature block
