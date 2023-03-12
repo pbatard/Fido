@@ -55,7 +55,7 @@ try {
 
 $Cmd = $False
 if ($Win -or $Rel -or $Ed -or $Lang -or $Arch -or $GetUrl) {
-	$Cmd = $True
+	$Cmd = $true
 }
 
 # Return a decimal Windows version that we can then check for platform support.
@@ -81,36 +81,52 @@ if ($winver -lt 10.0) {
 }
 
 #region Assembly Types
-$code = @"
+$Signature = @{
+	Namespace            = "WinAPI"
+	Name                 = "Utils"
+	Language             = "CSharp"
+	UsingNamespace       = "System.Runtime", "System.IO", "System.Text", "System.Drawing", "System.Globalization"
+	ReferencedAssemblies = $Drawing_Assembly
+	ErrorAction          = "Stop"
+	WarningAction        = "Ignore"
+	MemberDefinition     = @"
 [DllImport("shell32.dll", CharSet = CharSet.Auto, SetLastError = true, BestFitMapping = false, ThrowOnUnmappableChar = true)]
-	internal static extern int ExtractIconEx(string sFile, int iIndex, out IntPtr piLargeVersion, out IntPtr piSmallVersion, int amountIcons);
+internal static extern int ExtractIconEx(string sFile, int iIndex, out IntPtr piLargeVersion, out IntPtr piSmallVersion, int amountIcons);
+
 [DllImport("user32.dll")]
-	public static extern bool ShowWindow(IntPtr handle, int state);
-
-	// Extract an icon from a DLL
-	public static Icon ExtractIcon(string file, int number, bool largeIcon)
-	{
-		IntPtr large, small;
-		ExtractIconEx(file, number, out large, out small, 1);
-		try {
-			return Icon.FromHandle(largeIcon ? large : small);
-		} catch {
-			return null;
-		}
+public static extern bool ShowWindow(IntPtr handle, int state);
+// Extract an icon from a DLL
+public static Icon ExtractIcon(string file, int number, bool largeIcon)
+{
+	IntPtr large, small;
+	ExtractIconEx(file, number, out large, out small, 1);
+	try {
+		return Icon.FromHandle(largeIcon ? large : small);
+	} catch {
+		return null;
 	}
+}
 "@
+}
 
-if (!$Cmd) {
+if (-not $Cmd) {
 	Write-Host Please Wait...
+
 	$Drawing_Assembly = "System.Drawing"
 	# PowerShell 7 altered the name of the Drawing assembly...
 	if ($host.version -ge "7.0") {
 		$Drawing_Assembly += ".Common"
 	}
-	Add-Type -ErrorAction Stop -WarningAction Ignore -IgnoreWarnings -MemberDefinition $code -Namespace Gui -UsingNamespace System.Runtime, System.IO, System.Text, System.Drawing, System.Globalization -ReferencedAssemblies $Drawing_Assembly -Name Utils
+
+	if (-not ("WinAPI.Utils" -as [type]))
+	{
+		Add-Type @Signature
+	}
+
 	Add-Type -AssemblyName PresentationFramework
+
 	# Hide the powershell window: https://stackoverflow.com/a/27992426/1069307
-	[Gui.Utils]::ShowWindow(([System.Diagnostics.Process]::GetCurrentProcess() | Get-Process).MainWindowHandle, 0) | Out-Null
+	[WinAPI.Utils]::ShowWindow(([System.Diagnostics.Process]::GetCurrentProcess() | Get-Process).MainWindowHandle, 0) | Out-Null
 }
 #endregion
 
@@ -425,7 +441,7 @@ function Select-Language([string]$LangName)
 		($SysLocale.StartsWith("tr") -and $LangName -like "*Turk*") -or `
 		($SysLocale.StartsWith("uk") -and $LangName -like "*Ukrain*") -or `
 		($SysLocale.StartsWith("vi") -and $LangName -like "*Vietnam*")) {
-		return $True
+		return $true
 	}
 	return $False
 }
@@ -569,7 +585,7 @@ function Error([string]$ErrorMessage)
 	if (!$Cmd) {
 		$XMLForm.Title = $(Get-Translation("Error")) + ": " + $ErrorMessage
 		Refresh-Control($XMLForm)
-		$XMLGrid.Children[2 * $script:Stage + 1].IsEnabled = $True
+		$XMLGrid.Children[2 * $script:Stage + 1].IsEnabled = $true
 		$UserInput = [System.Windows.MessageBox]::Show($XMLForm.Title,  $(Get-Translation("Error")), "OK", "Error")
 		$script:ExitCode = $script:Stage--
 	} else {
@@ -1180,9 +1196,9 @@ $Continue.add_click({
 			$XMLForm.Close()
 		}
 	}
-	$Continue.IsEnabled = $True
+	$Continue.IsEnabled = $true
 	if ($Stage -ge 0) {
-		$Back.IsEnabled = $True
+		$Back.IsEnabled = $true
 	}
 })
 
@@ -1192,7 +1208,7 @@ $Back.add_click({
 	} else {
 		$XMLGrid.Children.RemoveAt(2 * $Stage + 3)
 		$XMLGrid.Children.RemoveAt(2 * $Stage + 2)
-		$XMLGrid.Children[2 * $Stage + 1].IsEnabled = $True
+		$XMLGrid.Children[2 * $Stage + 1].IsEnabled = $true
 		$dh2 = $dh
 		if ($Stage -eq 4 -and $PipeName) {
 			$Check.Visibility = "Collapsed"
@@ -1217,7 +1233,7 @@ $Back.add_click({
 })
 
 # Display the dialog
-$XMLForm.Add_Loaded( { $XMLForm.Activate() } )
+$XMLForm.Add_Loaded({$XMLForm.Activate()})
 $XMLForm.ShowDialog() | Out-Null
 
 # Clean up & exit
