@@ -81,6 +81,12 @@ if ($winver -lt 10.0) {
 }
 
 #region Assembly Types
+$Drawing_Assembly = "System.Drawing"
+# PowerShell 7 altered the name of the Drawing assembly...
+if ($host.version -ge "7.0") {
+	$Drawing_Assembly += ".Common"
+}
+
 $Signature = @{
 	Namespace            = "WinAPI"
 	Name                 = "Utils"
@@ -112,17 +118,10 @@ public static Icon ExtractIcon(string file, int number, bool largeIcon)
 if (-not $Cmd) {
 	Write-Host Please Wait...
 
-	$Drawing_Assembly = "System.Drawing"
-	# PowerShell 7 altered the name of the Drawing assembly...
-	if ($host.version -ge "7.0") {
-		$Drawing_Assembly += ".Common"
-	}
-
 	if (-not ("WinAPI.Utils" -as [type]))
 	{
 		Add-Type @Signature
 	}
-
 	Add-Type -AssemblyName PresentationFramework
 
 	# Hide the powershell window: https://stackoverflow.com/a/27992426/1069307
@@ -1098,7 +1097,7 @@ $XMLForm.Title = $AppTitle
 if ($Icon) {
 	$XMLForm.Icon = $Icon
 } else {
-	$XMLForm.Icon = [Gui.Utils]::ExtractIcon("imageres.dll", -5205, $true) | ConvertTo-ImageSource
+	$XMLForm.Icon = [WinAPI.Utils]::ExtractIcon("imageres.dll", -5205, $true) | ConvertTo-ImageSource
 }
 if ($Locale.StartsWith("ar") -or $Locale.StartsWith("fa") -or $Locale.StartsWith("he")) {
 	$XMLForm.FlowDirection = "RightToLeft"
