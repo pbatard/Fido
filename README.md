@@ -56,12 +56,7 @@ the actual download links, for all the architectures available for that language
 Requirements
 ------------
 
-PowerShell 3.0 or later is required. However the script should detect if you are using an older version and point you to
-the relevant PowerShell 3.0 download page if needed (which should only ever occur if you are running a vanilla version
-of Windows 7).
-
-Note that the current version of the script does not need Internet Explorer to be installed and should also work with
-PowerShell 7.
+Windows 8 or later with PowerShell. Windows 7 is __not__ supported.
 
 Commandline mode
 ----------------
@@ -71,17 +66,17 @@ and you can instead generate the ISO download from within a PowerShell console o
 
 The options are:
 - `Win`: Specify Windows version (e.g. _"Windows 10"_). Abbreviated version should work as well (e.g `-Win 10`) as long
-   as it is unique enough. If this option isn't specified, the most recent version of Windows is automatically selected.  
+   as it is unique enough. If this option isn't specified, the most recent version of Windows is automatically selected.
    You can obtain a list of supported versions by specifying `-Win List`.
 - `Rel`: Specify Windows release (e.g. _"21H1"_). If this option isn't specified, the most recent release for the chosen
    version of Windows is automatically selected. You can also use `-Rel Latest` to force the most recent to be used.
    You can obtain a list of supported versions by specifying `-Rel List`.
 - `Ed`: Specify Windows edition (e.g. _"Pro/Home"_). Abbreviated editions should work as well (e.g `-Ed Pro`) as long
-   as it is unique enough. If this option isn't specified, the most recent version of Windows is automatically selected.  
+   as it is unique enough. If this option isn't specified, the most recent version of Windows is automatically selected.
    You can obtain a list of supported versions by specifying `-Ed List`.
 - `Lang`: Specify Windows language (e.g. _"Arabic"_). Abbreviated or part of a language (e.g. `-Lang Int` for
    `English International`) should work as long as it's unique enough. If this option isn't specified, the script attempts
-   to select the same language as the system locale.  
+   to select the same language as the system locale.
    You can obtain a list of supported languages by specifying `-Lang List`.
 - `Arch`: Specify Windows architecture (e.g. _"x64"_). If this option isn't specified, the script attempts to use the same
    architecture as the one from the current system.
@@ -126,7 +121,7 @@ Additional Notes
 
 Because of its intended usage with Rufus, this script is not designed to cover every possible retail ISO downloads.
 Instead we mostly chose the ones that the general public is likely to request. For instance, we currently have no plan
-to add support for LTSB/LTSC Windows 10 ISOs downloads.
+to add support for LTSB/LTSC Windows ISOs downloads.
 
 If you are interested in such downloads, then you are kindly invited to visit the relevant download pages from Microsoft
 such as [this one](https://www.microsoft.com/evalcenter/evaluate-windows-10-enterprise) for LTSC versions.
