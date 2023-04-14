@@ -43,9 +43,9 @@ param(
 	# (Optional) Specify Windows architecture [Toggles commandline mode]
 	[string]$Arch,
 	# (Optional) Only display the download URL [Toggles commandline mode]
-	[switch]$GetUrl = $False,
+	[switch]$GetUrl = $false,
 	# (Optional) Increase verbosity
-	[switch]$Verbose = $False
+	[switch]$Verbose = $false
 )
 #endregion
 
@@ -53,9 +53,9 @@ try {
 	[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 } catch {}
 
-$Cmd = $False
+$Cmd = $false
 if ($Win -or $Rel -or $Ed -or $Lang -or $Arch -or $GetUrl) {
-	$Cmd = $True
+	$Cmd = $true
 }
 
 # Return a decimal Windows version that we can then check for platform support.
@@ -425,9 +425,9 @@ function Select-Language([string]$LangName)
 		($SysLocale.StartsWith("tr") -and $LangName -like "*Turk*") -or `
 		($SysLocale.StartsWith("uk") -and $LangName -like "*Ukrain*") -or `
 		($SysLocale.StartsWith("vi") -and $LangName -like "*Vietnam*")) {
-		return $True
+		return $true
 	}
-	return $False
+	return $false
 }
 
 function Add-Entry([int]$pos, [string]$Name, [array]$Items, [string]$DisplayName)
@@ -520,7 +520,7 @@ function ConvertTo-ImageSource
 function Throw-Error([object]$Req, [string]$Alt)
 {
 	$Err = $(GetElementById -Request $Req -Id "errorModalMessage").innerText -replace "<[^>]+>" -replace "\s+", " "
-	if (-not $Err) {
+	if (!$Err) {
 		$Err = $Alt
 	} else {
 		$Err = [System.Text.Encoding]::UTF8.GetString([byte[]][char[]]$Err)
@@ -531,7 +531,7 @@ function Throw-Error([object]$Req, [string]$Alt)
 # Translate a message string
 function Get-Translation([string]$Text)
 {
-	if (-not $English -contains $Text) {
+	if (!($English -contains $Text)) {
 		Write-Host "Error: '$Text' is not a translatable string"
 		return "(Untranslated)"
 	}
@@ -569,7 +569,7 @@ function Error([string]$ErrorMessage)
 	if (!$Cmd) {
 		$XMLForm.Title = $(Get-Translation("Error")) + ": " + $ErrorMessage
 		Refresh-Control($XMLForm)
-		$XMLGrid.Children[2 * $script:Stage + 1].IsEnabled = $True
+		$XMLGrid.Children[2 * $script:Stage + 1].IsEnabled = $true
 		$UserInput = [System.Windows.MessageBox]::Show($XMLForm.Title,  $(Get-Translation("Error")), "OK", "Error")
 		$script:ExitCode = $script:Stage--
 	} else {
@@ -642,7 +642,7 @@ $EnglishMessages = "en-US|Version|Release|Edition|Language|Architecture|Download
 	"This feature is not available on this platform."
 [string[]]$English = $EnglishMessages.Split('|')
 [string[]]$Localized = $null
-if ($LocData -and (-not $LocData.StartsWith("en-US"))) {
+if ($LocData -and !$LocData.StartsWith("en-US")) {
 	$Localized = $LocData.Split('|')
 	# Adjust the $Localized array if we have more or fewer strings than in $EnglishMessages
 	if ($Localized.Length -lt $English.Length) {
@@ -844,7 +844,7 @@ function Get-Windows-Download-Links([int]$SelectedVersion, [int]$SelectedRelease
 			$r = Invoke-WebRequest -Method Post -Headers @{ "Referer" = $ref } -UseBasicParsing -UserAgent $UserAgent -WebSession $Session $url
 			if ($r -match "errorModalMessage") {
 				$Alt = [regex]::Match($r, '<p id="errorModalMessage">(.+?)<\/p>').Groups[1].Value -replace "<[^>]+>" -replace "\s+", " " -replace "\?\?\?", "-"
-				if (-not $Alt) {
+				if (!$Alt) {
 					$Alt = "Could not retrieve architectures from server"
 				} else {
 					$Alt += " " + $SessionId + "."
@@ -864,7 +864,7 @@ function Get-Windows-Download-Links([int]$SelectedVersion, [int]$SelectedRelease
 			foreach ($var in $xml.inputs.input) {
 				$json = $var.value | ConvertFrom-Json;
 				if ($json) {
-					if (($Is64 -and $json.DownloadType -eq "x64") -or (-not $Is64 -and $json.DownloadType -eq "x86")) {
+					if (($Is64 -and $json.DownloadType -eq "x64") -or (!$Is64 -and $json.DownloadType -eq "x86")) {
 						$script:SelectedIndex = $i
 					}
 					$links += @(New-Object PsObject -Property @{ Type = $json.DownloadType; Link = $json.Uri })
@@ -886,7 +886,7 @@ function Get-Windows-Download-Links([int]$SelectedVersion, [int]$SelectedRelease
 function Process-Download-Link([string]$Url)
 {
 	try {
-		if ($PipeName -and -not $Check.IsChecked) {
+		if ($PipeName -and !$Check.IsChecked) {
 			Send-Message -PipeName $PipeName -Message $Url
 		} else {
 			if ($Cmd) {
@@ -1110,9 +1110,9 @@ $WindowsVersion.DisplayMemberPath = "Version"
 # Button Action
 $Continue.add_click({
 	$script:Stage++
-	$XMLGrid.Children[2 * $Stage + 1].IsEnabled = $False
-	$Continue.IsEnabled = $False
-	$Back.IsEnabled = $False
+	$XMLGrid.Children[2 * $Stage + 1].IsEnabled = $false
+	$Continue.IsEnabled = $false
+	$Back.IsEnabled = $false
 	Refresh-Control($Continue)
 	Refresh-Control($Back)
 
@@ -1180,9 +1180,9 @@ $Continue.add_click({
 			$XMLForm.Close()
 		}
 	}
-	$Continue.IsEnabled = $True
+	$Continue.IsEnabled = $true
 	if ($Stage -ge 0) {
-		$Back.IsEnabled = $True
+		$Back.IsEnabled = $true
 	}
 })
 
@@ -1192,7 +1192,7 @@ $Back.add_click({
 	} else {
 		$XMLGrid.Children.RemoveAt(2 * $Stage + 3)
 		$XMLGrid.Children.RemoveAt(2 * $Stage + 2)
-		$XMLGrid.Children[2 * $Stage + 1].IsEnabled = $True
+		$XMLGrid.Children[2 * $Stage + 1].IsEnabled = $true
 		$dh2 = $dh
 		if ($Stage -eq 4 -and $PipeName) {
 			$Check.Visibility = "Collapsed"
@@ -1217,7 +1217,7 @@ $Back.add_click({
 })
 
 # Display the dialog
-$XMLForm.Add_Loaded( { $XMLForm.Activate() } )
+$XMLForm.Add_Loaded({$XMLForm.Activate()})
 $XMLForm.ShowDialog() | Out-Null
 
 # Clean up & exit
