@@ -81,36 +81,50 @@ if ($winver -lt 10.0) {
 }
 
 #region Assembly Types
-$code = @"
-[DllImport("shell32.dll", CharSet = CharSet.Auto, SetLastError = true, BestFitMapping = false, ThrowOnUnmappableChar = true)]
-	internal static extern int ExtractIconEx(string sFile, int iIndex, out IntPtr piLargeVersion, out IntPtr piSmallVersion, int amountIcons);
-[DllImport("user32.dll")]
-	public static extern bool ShowWindow(IntPtr handle, int state);
+$Drawing_Assembly = "System.Drawing"
+# PowerShell 7 altered the name of the Drawing assembly...
+if ($host.version -ge "7.0") {
+	$Drawing_Assembly += ".Common"
+}
 
-	// Extract an icon from a DLL
-	public static Icon ExtractIcon(string file, int number, bool largeIcon)
-	{
-		IntPtr large, small;
-		ExtractIconEx(file, number, out large, out small, 1);
-		try {
-			return Icon.FromHandle(largeIcon ? large : small);
-		} catch {
-			return null;
+$Signature = @{
+	Namespace            = "WinAPI"
+	Name                 = "Utils"
+	Language             = "CSharp"
+	UsingNamespace       = "System.Runtime", "System.IO", "System.Text", "System.Drawing", "System.Globalization"
+	ReferencedAssemblies = $Drawing_Assembly
+	ErrorAction          = "Stop"
+	WarningAction        = "Ignore"
+	MemberDefinition     = @"
+		[DllImport("shell32.dll", CharSet = CharSet.Auto, SetLastError = true, BestFitMapping = false, ThrowOnUnmappableChar = true)]
+		internal static extern int ExtractIconEx(string sFile, int iIndex, out IntPtr piLargeVersion, out IntPtr piSmallVersion, int amountIcons);
+
+		[DllImport("user32.dll")]
+		public static extern bool ShowWindow(IntPtr handle, int state);
+		// Extract an icon from a DLL
+		public static Icon ExtractIcon(string file, int number, bool largeIcon) {
+			IntPtr large, small;
+			ExtractIconEx(file, number, out large, out small, 1);
+			try {
+				return Icon.FromHandle(largeIcon ? large : small);
+			} catch {
+				return null;
+			}
 		}
-	}
 "@
+}
 
 if (!$Cmd) {
 	Write-Host Please Wait...
-	$Drawing_Assembly = "System.Drawing"
-	# PowerShell 7 altered the name of the Drawing assembly...
-	if ($host.version -ge "7.0") {
-		$Drawing_Assembly += ".Common"
+
+	if (!("WinAPI.Utils" -as [type]))
+	{
+		Add-Type @Signature
 	}
-	Add-Type -ErrorAction Stop -WarningAction Ignore -IgnoreWarnings -MemberDefinition $code -Namespace Gui -UsingNamespace System.Runtime, System.IO, System.Text, System.Drawing, System.Globalization -ReferencedAssemblies $Drawing_Assembly -Name Utils
 	Add-Type -AssemblyName PresentationFramework
+
 	# Hide the powershell window: https://stackoverflow.com/a/27992426/1069307
-	[Gui.Utils]::ShowWindow(([System.Diagnostics.Process]::GetCurrentProcess() | Get-Process).MainWindowHandle, 0) | Out-Null
+	[WinAPI.Utils]::ShowWindow(([System.Diagnostics.Process]::GetCurrentProcess() | Get-Process).MainWindowHandle, 0) | Out-Null
 }
 #endregion
 
@@ -1082,7 +1096,7 @@ $XMLForm.Title = $AppTitle
 if ($Icon) {
 	$XMLForm.Icon = $Icon
 } else {
-	$XMLForm.Icon = [Gui.Utils]::ExtractIcon("imageres.dll", -5205, $true) | ConvertTo-ImageSource
+	$XMLForm.Icon = [WinAPI.Utils]::ExtractIcon("imageres.dll", -5205, $true) | ConvertTo-ImageSource
 }
 if ($Locale.StartsWith("ar") -or $Locale.StartsWith("fa") -or $Locale.StartsWith("he")) {
 	$XMLForm.FlowDirection = "RightToLeft"
@@ -1226,8 +1240,8 @@ exit $ExitCode
 # SIG # Begin signature block
 # MIIkWQYJKoZIhvcNAQcCoIIkSjCCJEYCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDCpZpntjuU2uHY
-# z3/0OsY2UtUKjz1UjCN6T8dRzpny96CCElkwggVvMIIEV6ADAgECAhBI/JO0YFWU
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCry4qIpIxJTezV
+# Z5To4XIpemc/02+LczRQdTdUGin4yaCCElkwggVvMIIEV6ADAgECAhBI/JO0YFWU
 # jTanyYqJ1pQWMA0GCSqGSIb3DQEBDAUAMHsxCzAJBgNVBAYTAkdCMRswGQYDVQQI
 # DBJHcmVhdGVyIE1hbmNoZXN0ZXIxEDAOBgNVBAcMB1NhbGZvcmQxGjAYBgNVBAoM
 # EUNvbW9kbyBDQSBMaW1pdGVkMSEwHwYDVQQDDBhBQUEgQ2VydGlmaWNhdGUgU2Vy
@@ -1330,23 +1344,23 @@ exit $ExitCode
 # aWMgQ29kZSBTaWduaW5nIENBIEVWIFIzNgIRAL+xUAG79ZLUlip3l+pzb6MwDQYJ
 # YIZIAWUDBAIBBQCgfDAQBgorBgEEAYI3AgEMMQIwADAZBgkqhkiG9w0BCQMxDAYK
 # KwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkqhkiG
-# 9w0BCQQxIgQgH+Kly8R4u5iFMlpWglzfc5lMDQgs38C2FS0CujFgfdMwDQYJKoZI
-# hvcNAQEBBQAEggIAqDdE38CiBnf6ksVoNbp+EAUi5M1rD/b885OIuaXqUUjCMOaR
-# R34hPylb/Lc9CbCJ1aiqjhyap/hnNryeXBSkr+HIfP5UyDGXjCsfFFwyPVyRPd72
-# BKM8tYfuUvZbIvWmsFUJfe24VTEGTbh5XTM5s6RgQCQZ4V/M6ePCH6LxiHuIufWL
-# DCaKS6/AO0icPkF0CtQQiGk/z0nlrp6T6IppDkGS7yAYip5/flBxmQsRCkNlL9mw
-# XTL63kd1ar9cZTR1knAXwM2qXfkkOxGX8OGQ04P01/wWjEBMoYBUmUbHIWKgcg1T
-# QmXZEObFJHRkNMfPU+F+oc/kDwd4SXCv6x7E6XOgxB4C9B9sE88ZEOOv26FTS4fa
-# +VVFPffxfmdQT+pKch8j3h/OGgJM2OAqnEoK8KTZYlCoJO781YfAjertrewXKHv/
-# HzlJ7gu5t3Ji7WrzoCusHEszv+LYl3TupZ2VZNmQDY57/br3LxNHOxRmjFAigI6z
-# 3OyVwOx6L+onBr+jg5LGkA+XPhTjdAhBJ2bI9ayUYURKv5/jNUbyk6RZHUncTKUj
-# Oze0eaX15F/UpGbJZaR9wCCj28jCk4zxbqSTqQcSjxM8zfp23fcxd2NICtd8UhFt
-# pGfR1jleAJsKuDJts+k8WcfT2SaEGQmmklM/wIusRaIWn6KHr8wAFBgz8huhgg49
+# 9w0BCQQxIgQgkTazyU2cFV/QKmyHAzQd++rUC59orcQPftkyA05GlU4wDQYJKoZI
+# hvcNAQEBBQAEggIABFGZSE7GeEnWoTZgFC2jiVb2lUvcpw/W75J0IMTqFxgey/Wn
+# kSDuyEVknjtmRLvfef9g3guIyaIj7dDWHhj0AHO4YpYQVdMztFjxhWiDaKDS+O10
+# WLuHJ+1GFJw5trtmePxzhTbcP0KVedtze+6qIv4HnbxRNMHSm5KjUtjb7esB7sLK
+# EegCafQzm4ZQHoET6+0VgigY5PG0Kjema2052AHnD6JDcIALolgTN07pjQZiQ5Ax
+# qNOYFFWL9rmVQDFCtHApJEtWZyNHn77f3DpThC4RfVQy7xnnc1qrRxrZklkJY5YB
+# PU5QOQLKw4Gfr59DO4HejqsIC8+Ojznzd0th1zkq7QX4VHFUtf907oC8txu4WtzR
+# 1VhTVs3Amlv7m19YX+0qc6DGXJj008hCUAIaNIln5zr2PZ9F0yx84v1hxbG7aTSd
+# IDfOLq7yRX3v2/ZZ7JK7uexKf71IitzoeBINCk03+TwrRTSE4lu1sS36t28ShvJT
+# R0cREgJ2wnNwF8sN2yC1/b7J5XmOvoYN7N5CqJl11X6e79mJq8/TIRCk3XiQQ8Ew
+# 086qrljnFM20V076PABKrPU9qVLwx7zNi0n7PVzH9ARzsu9eWe/iDuN+VE/kDxA+
+# ZMlB/93pU+3ylBbq4citc40fdJW3LYZZsq3+MVn0HzCEjENNsZATH+fy31uhgg49
 # MIIOOQYKKwYBBAGCNwMDATGCDikwgg4lBgkqhkiG9w0BBwKggg4WMIIOEgIBAzEN
 # MAsGCWCGSAFlAwQCATCCAQ8GCyqGSIb3DQEJEAEEoIH/BIH8MIH5AgEBBgtghkgB
-# hvhFAQcXAzAxMA0GCWCGSAFlAwQCAQUABCBIdB9A36e59U63AWbaDgc60655s3pE
-# PaBLt9XKx9DWuQIVAKmmRn4m0Gad1QsRv95QHHuKDBOzGA8yMDIzMDMwNzEyMTEz
-# MFowAwIBHqCBhqSBgzCBgDELMAkGA1UEBhMCVVMxHTAbBgNVBAoTFFN5bWFudGVj
+# hvhFAQcXAzAxMA0GCWCGSAFlAwQCAQUABCDV64TeGutvwTfdLjHoI9hoN91hASgR
+# otG1wzWlu1pKAwIVAL4yY5LLzww+/XGT517GxdUaeLEgGA8yMDIzMDQxNDEwMzYw
+# MVowAwIBHqCBhqSBgzCBgDELMAkGA1UEBhMCVVMxHTAbBgNVBAoTFFN5bWFudGVj
 # IENvcnBvcmF0aW9uMR8wHQYDVQQLExZTeW1hbnRlYyBUcnVzdCBOZXR3b3JrMTEw
 # LwYDVQQDEyhTeW1hbnRlYyBTSEEyNTYgVGltZVN0YW1waW5nIFNpZ25lciAtIEcz
 # oIIKizCCBTgwggQgoAMCAQICEHsFsdRJaFFE98mJ0pwZnRIwDQYJKoZIhvcNAQEL
@@ -1409,13 +1423,13 @@ exit $ExitCode
 # BgNVBAoTFFN5bWFudGVjIENvcnBvcmF0aW9uMR8wHQYDVQQLExZTeW1hbnRlYyBU
 # cnVzdCBOZXR3b3JrMSgwJgYDVQQDEx9TeW1hbnRlYyBTSEEyNTYgVGltZVN0YW1w
 # aW5nIENBAhB71OWvuswHP6EBIwQiQU0SMAsGCWCGSAFlAwQCAaCBpDAaBgkqhkiG
-# 9w0BCQMxDQYLKoZIhvcNAQkQAQQwHAYJKoZIhvcNAQkFMQ8XDTIzMDMwNzEyMTEz
-# MFowLwYJKoZIhvcNAQkEMSIEIBi+xZssYhAdmjF0gLXZv2WCNOM3iW02zqjWyiHi
-# 3ZVhMDcGCyqGSIb3DQEJEAIvMSgwJjAkMCIEIMR0znYAfQI5Tg2l5N58FMaA+eKC
-# ATz+9lPvXbcf32H4MAsGCSqGSIb3DQEBAQSCAQAQ/Kq0P6rLFJ66lXNqtLxRuZtB
-# MUMdYUhBiKy3RCJwf1SMi4nhV/aHEw43hQz+GsxrxENwy24VFfxOg6kguqI1Qm0b
-# w5+rCqFykHUntTAsIND27MthzzXn69wkoFv0n2IKjq05KuUEXgEy+eemStG1G0tU
-# efXWl2eFR+8ItErCzAi7Dt7R76vhRG7Sj1Ik2PlltdnK0+SuSdLfeVbTrrYQ2Kub
-# ueVJWMFFE4CX0LvFJ6fdytVVqTD8GXNj/bdt2La5zLEobYoQXHzXwJHXGY+Nj9d8
-# 5fiYgMP7RA04944Xjkoc761EySwFWPHNJjg8DTSAz+NKrnFdvb9K3hoik1wT
+# 9w0BCQMxDQYLKoZIhvcNAQkQAQQwHAYJKoZIhvcNAQkFMQ8XDTIzMDQxNDEwMzYw
+# MVowLwYJKoZIhvcNAQkEMSIEIIW+oGvEb18tR/IKu7+Bx7pMyR4HbmaIsEP9JqsF
+# DXOTMDcGCyqGSIb3DQEJEAIvMSgwJjAkMCIEIMR0znYAfQI5Tg2l5N58FMaA+eKC
+# ATz+9lPvXbcf32H4MAsGCSqGSIb3DQEBAQSCAQAwAPOObhgrAOl8tMOskiTzSbWe
+# pVMf+cvJ6VzXjjF0lgen/DuppZB0nah/Rjh8hbFzoCM1RqPkANwtRtyV8NAScGv3
+# nAdKkNGljHtPDLsB6frYkFJgyelmT6u2lWgTYYuF0PgKcjiVHtxk86bhSe3gvMHV
+# 3s0FuLH/Z9YWk8UwcH7/DSaM1sc+NRqM603nVVNx43RhPLIBY0PLbbsZibfoWgQn
+# ExKQYFx9WSa60vRZjeasR0j9hYos1UCV1fJttMMYEkYA8EvHyOhclKSy7OXghazv
+# 45QHMfNQqRimBcf9Pd5Nc3uknvDEkBapM5Y/n1GoKBI8i5mXXlnsEt2OXFm5
 # SIG # End signature block
