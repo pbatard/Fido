@@ -1,4 +1,4 @@
-Fido: Un script PowerShell per scaricare gli ISO di Microsoft Windows é UEFI Shell
+Fido: Un script PowerShell per scaricare gli ISO di Microsoft Windows e di UEFI Shell
 ============================================================================
 
 [![Licenza](https://img.shields.io/badge/licenza-GPLv3-blue.svg?style=flat-square)](https://www.gnu.org/licenses/gpl-3.0.en.html)
@@ -7,11 +7,11 @@ Fido: Un script PowerShell per scaricare gli ISO di Microsoft Windows é UEFI Sh
 Descrizione
 -----------
 
-Fido é un script PowerShell che é progettato per essere utilizzato in il tool [Rufus](https://github.com/pbatard/rufus), ma 
-che anche puo essere utalizzato nell modo indipendente, e che il scopo é per automatizzare l'accesso a il ufficiale link per
-scaricare Retail ISO di Microsoft Windows é anche fornire l'accesso conveniente a [avviabile immagini UEFI Shell](https://github.com/pbatard/UEFI-Shell).
+Fido è un script PowerShell che è progettato per essere utilizzato con il tool [Rufus](https://github.com/pbatard/rufus), ma 
+che può essere anche utilizzato indipendentemente, il quale scopo è di automatizzare l'accesso ai link ufficiali per
+scaricare Retail ISO di Microsoft Windows e fornire un accesso conveniente alle [immagini avviabili UEFI Shell](https://github.com/pbatard/UEFI-Shell).
 
-Questa script esiste perche, mentre Microsoft fa gli link per scaricare retail ISO libero e pubblicamente disponibile
+Questo script esiste perché, mentre Microsoft fa i link per scaricare retail ISO libero e pubblicamente disponibile
 (almeno per Windows 8 a Windows 11), fino al gli rilasci recenti, gli maggior parte di questi link erano solo disponibile
 dopo costringendo gli utenti a saltare attraverso un sacco di cerchi di fuoco che ha creato un controproducente, se no
 ostile, esperienza del consumatore, che ha detratto da cosa persone voligono veramente (accesso dirreto a gli link per 
@@ -21,7 +21,7 @@ The idiom "jumping through hoops" is, as all idioms, difficult to translate, so 
 of fire" was added.
 --->
 Il raggione perche qualchuno vorrei scaricare gli __retail__ ISO Windows in contrapposizione a generare gli ISO con
-il "Media Creation Tool" (MCT) di Microsoft, questo è perche usando gli ufficiale retail ISO è, per ora, l'unica metodo
+il "Media Creation Tool" (MCT) di Microsoft, è perche usando gli ufficiale retail ISO è, per ora, l'unica metodo
 per fare sicuro che il contento di il tuo OS non si ha cambiatio. Perche c'è solo un singolo "master" per ciascuno di 
 essi, gli retail ISO da Microsoft sono l'unici che puoi prendere un ufficiale SHA-1 (da MSDN, se c'hai accesso, o
 da altri siti [tipo questa](https://msdn.rg-adguard.net/public.php)) che ti permette di essere 100% siciro che il ISO
