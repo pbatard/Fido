@@ -137,6 +137,11 @@ $WindowsVersions = @(
 	@(
 		@("Windows 11", "windows11"),
 		@(
+			"22H2 v2 (Build 22621.1702 - 2023.05)",
+			@("Windows 11 Home/Pro/Edu", 2616),
+			@("Windows 11 Home China ", ($zh + 2617))
+		),
+		@(
 			"22H2 v1 (Build 22621.525 - 2022.10)",
 			@("Windows 11 Home/Pro/Edu", 2370),
 			@("Windows 11 Home China ", ($zh + 2371))
