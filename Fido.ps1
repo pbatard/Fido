@@ -1,5 +1,5 @@
 ﻿#
-# Fido v1.46 - Feature ISO Downloader, for retail Windows images and UEFI Shell
+# Fido v1.47 - Feature ISO Downloader, for retail Windows images and UEFI Shell
 # Copyright © 2019-2023 Pete Batard <pete@akeo.ie>
 # Command line support: Copyright © 2021 flx5
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
@@ -140,16 +140,6 @@ $WindowsVersions = @(
 			"22H2 v1 (Build 22621.525 - 2022.10)",
 			@("Windows 11 Home/Pro/Edu", 2370),
 			@("Windows 11 Home China ", ($zh + 2371))
-		),
-		@(
-			"21H2 v1 (Build 22000.318 - 2021.11)",
-			@("Windows 11 Home/Pro/Edu", 2093),
-			@("Windows 11 Home China ", ($zh + 2094))
-		),
-		@(
-			"21H2 (Build 22000.194 - 2021.10)",
-			@("Windows 11 Home/Pro/Edu", 2069),
-			@("Windows 11 Home China ", ($zh + 2070))
 		)
 	),
 	@(
@@ -158,148 +148,8 @@ $WindowsVersions = @(
 			"22H2 (Build 19045.2006 - 2022.10)",
 			@("Windows 10 Home/Pro/Edu", 2377),
 			@("Windows 10 Home China ", ($zh + 2378))
-		),
-		@(
-			"21H2 (Build 19044.1288 - 2021.11)",
-			@("Windows 10 Home/Pro/Edu", 2084),
-			@("Windows 10 Home China ", ($zh + 2085))
-		),
-		@(
-			"21H1 (Build 19043.985 - 2021.05)",
-			@("Windows 10 Home/Pro", 2033),
-			@("Windows 10 Education", 2032),
-			@("Windows 10 Home China ", ($zh + 2034))
-		),
-		@(
-			"20H2 (Build 19042.631 - 2020.12)",
-			@("Windows 10 Home/Pro", 1882),
-			@("Windows 10 Education", 1884),
-			@("Windows 10 Home China ", ($zh + 1883))
-		),
-		@(
-			"20H2 (Build 19042.508 - 2020.10)",
-			@("Windows 10 Home/Pro", 1807),
-			@("Windows 10 Education", 1805),
-			@("Windows 10 Home China ", ($zh + 1806))
-		),
-		@(
-			"20H1 (Build 19041.264 - 2020.05)",
-			@("Windows 10 Home/Pro", 1626),
-			@("Windows 10 Education", 1625),
-			@("Windows 10 Home China ", ($zh + 1627))
-		),
-		@(
-			"19H2 (Build 18363.418 - 2019.11)",
-			@("Windows 10 Home/Pro", 1429),
-			@("Windows 10 Education", 1431),
-			@("Windows 10 Home China ", ($zh + 1430))
-		),
-		@(
-			"19H1 (Build 18362.356 - 2019.09)",
-			@("Windows 10 Home/Pro", 1384),
-			@("Windows 10 Education", 1386),
-			@("Windows 10 Home China ", ($zh + 1385))
-		),
-		@(
-			"19H1 (Build 18362.30 - 2019.05)",
-			@("Windows 10 Home/Pro", 1214),
-			@("Windows 10 Education", 1216),
-			@("Windows 10 Home China ", ($zh + 1215))
-		),
-		@(
-			"1809 R3 (Build 17763.379 - 2019.03)",
-			@("Windows 10 Home/Pro", 1203),
-			@("Windows 10 Education", 1202),
-			@("Windows 10 Home China ", ($zh + 1204))
-		),
-		@(
-			"1809 R2 (Build 17763.107 - 2018.10)",
-			@("Windows 10 Home/Pro", 1060),
-			@("Windows 10 Education", 1056),
-			@("Windows 10 Home China ", ($zh + 1061))
-		),
-		@(
-			"1809 R1 (Build 17763.1 - 2018.09)",
-			@("Windows 10 Home/Pro", 1019),
-			@("Windows 10 Education", 1021),
-			@("Windows 10 Home China ", ($zh + 1020))
-		),
-		@(
-			"1803 (Build 17134.1 - 2018.04)",
-			@("Windows 10 Home/Pro", 651),
-			@("Windows 10 Education", 655),
-			@("Windows 10 1803", 637),
-			@("Windows 10 Home China", ($zh + 652))
-		),
-		@(
-			"1709 (Build 16299.15 - 2017.09)",
-			@("Windows 10 Home/Pro", 484),
-			@("Windows 10 Education", 488),
-			@("Windows 10 Home China", ($zh + 485))
-		),
-		@(
-			"1703 [Redstone 2] (Build 15063.0 - 2017.03)",
-			@("Windows 10 Home/Pro", 361),
-			@("Windows 10 Home/Pro N", 362),
-			@("Windows 10 Single Language", 363),
-			@("Windows 10 Education", 423),
-			@("Windows 10 Education N", 424),
-			@("Windows 10 Home China", ($zh + 364))
-		),
-		@(
-			"1607 [Redstone 1] (Build 14393.0 - 2016.07)",
-			@("Windows 10 Home/Pro", 244),
-			@("Windows 10 Home/Pro N", 245),
-			@("Windows 10 Single Language", 246),
-			@("Windows 10 Education", 242),
-			@("Windows 10 Education N", 243),
-			@("Windows 10 China Get Genuine", ($zh + 247))
-		),
-		@(
-			"1511 R3 [Threshold 2] (Build 10586.164 - 2016.04)",
-			@("Windows 10 Home/Pro", 178),
-			@("Windows 10 Home/Pro N", 183),
-			@("Windows 10 Single Language", 184),
-			@("Windows 10 Education", 179),
-			@("Windows 10 Education N", 181),
-			@("Windows 10 KN", ($ko + 182)),
-			@("Windows 10 Education KN", ($ko + 180)),
-			@("Windows 10 China Get Genuine", ($zh + 185))
-		),
-		@(
-			"1511 R2 [Threshold 2] (Build 10586.104 - 2016.02)",
-			@("Windows 10 Home/Pro", 109),
-			@("Windows 10 Home/Pro N", 115),
-			@("Windows 10 Single Language", 116),
-			@("Windows 10 Education", 110),
-			@("Windows 10 Education N", 112),
-			@("Windows 10 KN", ($ko + 114)),
-			@("Windows 10 Education KN", ($ko + 111)),
-			@("Windows 10 China Get Genuine", ($zh + 113))
-		),
-		@(
-			"1511 R1 [Threshold 2] (Build 10586.0 - 2015.11)",
-			@("Windows 10 Home/Pro", 99),
-			@("Windows 10 Home/Pro N", 105),
-			@("Windows 10 Single Language", 106),
-			@("Windows 10 Education", 100),
-			@("Windows 10 Education N", 102),
-			@("Windows 10 KN", ($ko + 104)),
-			@("Windows 10 Education KN", ($ko + 101)),
-			@("Windows 10 China Get Genuine", ($zh + 103))
-		),
-		@(
-			"1507 [Threshold 1] (Build 10240.16384 - 2015.07)",
-			@("Windows 10 Home/Pro", 79),
-			@("Windows 10 Home/Pro N", 81),
-			@("Windows 10 Single Language", 82),
-			@("Windows 10 Education", 75)
-			@("Windows 10 Education N", 77),
-			@("Windows 10 KN", ($ko + 80)),
-			@("Windows 10 Education KN", ($ko + 76)),
-			@("Windows 10 China Get Genuine", ($zh + 78))
 		)
-	),
+	)
 	@(
 		@("Windows 8.1", "windows8ISO"),
 		@(
@@ -1198,8 +1048,8 @@ exit $ExitCode
 # SIG # Begin signature block
 # MIIkWQYJKoZIhvcNAQcCoIIkSjCCJEYCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAXwtxm+mYAZToF
-# MN/W9BVxYssBdJgHpUBa5KaOnXxekaCCElkwggVvMIIEV6ADAgECAhBI/JO0YFWU
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAjii6WTuvKA7wZ
+# +QWnaLzxfDTWEOE8HOLyioYocUIEXqCCElkwggVvMIIEV6ADAgECAhBI/JO0YFWU
 # jTanyYqJ1pQWMA0GCSqGSIb3DQEBDAUAMHsxCzAJBgNVBAYTAkdCMRswGQYDVQQI
 # DBJHcmVhdGVyIE1hbmNoZXN0ZXIxEDAOBgNVBAcMB1NhbGZvcmQxGjAYBgNVBAoM
 # EUNvbW9kbyBDQSBMaW1pdGVkMSEwHwYDVQQDDBhBQUEgQ2VydGlmaWNhdGUgU2Vy
@@ -1302,23 +1152,23 @@ exit $ExitCode
 # aWMgQ29kZSBTaWduaW5nIENBIEVWIFIzNgIRAL+xUAG79ZLUlip3l+pzb6MwDQYJ
 # YIZIAWUDBAIBBQCgfDAQBgorBgEEAYI3AgEMMQIwADAZBgkqhkiG9w0BCQMxDAYK
 # KwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkqhkiG
-# 9w0BCQQxIgQgkLJ7KpFnRXWMO8X7vU/I7Q3jtnRJIa2M3A+9pgWOFiowDQYJKoZI
-# hvcNAQEBBQAEggIAQGV7TPwZw904Z5j2/ahvb7kpVdcm89xya4cTxreS6h0S11+T
-# DHXNDzKE9RkE8i3WaHcJyUKOAGXSeD27Vn4xcAvHOSGv2OxaST3/BN+rpxccngPd
-# PhGOY8YIp9AWtCupGOanWxgUlr9ixSFgYZmd3pxNz8fgNi9sTU0uRwIlXd0Mjj3m
-# a7svCTZhs2gKYDwSwVuHDG3EV4oOEKF2SvdIcACWO4uedi0M7VebGdgQ+H8+b26Z
-# y6C8WPG3BUk/qlkqjusfB11WfKMlYrlnYhGfdnM1VrBQKQEODaNHszYoOtL92Pen
-# 8mGqRZUMQCU+Hwb9ArtHckaHDAYXTgwNzqlqQOZlhfxiuwEssGjVE45oQabv8fRq
-# rQfwI4oYM9Y1WEjlTBvTi3GQgb/NuvWKOh8YnbFWWq+QFRG73Egn/uicrPxIgDoy
-# wt8PE09PGhJQ+qVyhqrUeeSF+j0evA6E2pUmP49ZLBsKthhYEI1h5JPMBgxkuXC4
-# 5ZfkVCALwOZ/LD4vRMZBghXQbAI5WvjB+iObSEO9MtoI/MPMDKyOfEueYDb2nroL
-# d3R98omGWCLoCCr+BLg+XjZQWliSUs8L/sNAUlBb1S0kWwpSND+NUHed4VEnS14H
-# Rtn3Cx2H7WgHeQSfiOPDcYtTqHz48RHuhd2C+v+NiPKgkOtTxLH7H6BlW96hgg49
+# 9w0BCQQxIgQgffg3LYEcDFFTN2TP9YbrX/y1AP7qX05jfMxGCQPM9n4wDQYJKoZI
+# hvcNAQEBBQAEggIAgUOLLPmuBcamuoWFk+vx39Ei4mL6yoWCzL8Pi4uTFD1W2rJa
+# brYE3+S0EvN4T7nwoWhKzRuEJoJX0gerS5LMvP0l9DV3WxQ2+Zonfb0+Cwq2lzYL
+# yUYBMOjepwpTYZfDhBiF4pvFOUVMxtB73/KejAqh14gbB3wqL3oUFOzQ/oGWVzTp
+# xAV9eVD8ylwGtvuj+Kz5UCuzmLVofu9gpcsTjR4s/vTu2hixhFJdRZRq6daYJ35d
+# IuWgP5Iu+OCz+02gyy09fvLRYdfq6m8orqIIAxKqMJerQJW/32x1gaRETzgejz6d
+# GfUKc7n+d+DC3DsM4KiUzNttxKoBf0+R1Axu4Qb2/Z65oEAqKQ/N3720TGzm15cP
+# h9CQ8353dM//1Y5Ud8E04NYLz45QH1DBeQWbkBsXon57FikII6tsU1H1iIPRdcsi
+# DTaDjhCImNxNc9vtJaOh49Ebfz+D1LxjHNOd4g+9+huCzvpDrvkuLqB3MiCuAAuZ
+# /ZIJ2NzrzWuXij4QEAJQ0W6jdngiAlGopqW+pHzvAvDDL14KtUewEJEaPf4Wu2KD
+# uEAnsxDQyjZex0j9f6pmDWUjQtS8Itb/p6+mzem0zimOpOm/pYqwYiaqHupbM8bC
+# SzB3Svt8gqsMaJrWtr2VlYxCufGTzyKm3l57eDXA/qP9e8pCWGysnt+HN8ehgg49
 # MIIOOQYKKwYBBAGCNwMDATGCDikwgg4lBgkqhkiG9w0BBwKggg4WMIIOEgIBAzEN
 # MAsGCWCGSAFlAwQCATCCAQ8GCyqGSIb3DQEJEAEEoIH/BIH8MIH5AgEBBgtghkgB
-# hvhFAQcXAzAxMA0GCWCGSAFlAwQCAQUABCAafKvrRkdVxwCF6brdFdzfTfKcBENE
-# HXM7VdQTxnUxUwIVANS/ey8tLSQ9LlI0IgAcicapMC63GA8yMDIzMDUxNTEwNDE1
-# NFowAwIBHqCBhqSBgzCBgDELMAkGA1UEBhMCVVMxHTAbBgNVBAoTFFN5bWFudGVj
+# hvhFAQcXAzAxMA0GCWCGSAFlAwQCAQUABCC6ymOFzMkzTFKoN1+Dxa8OHmy3u5Na
+# ugzf1ZKaWNRYGgIVAIL4TQIH1cjJpANJkRNrdz5+8molGA8yMDIzMDUyMzE2MjM1
+# MFowAwIBHqCBhqSBgzCBgDELMAkGA1UEBhMCVVMxHTAbBgNVBAoTFFN5bWFudGVj
 # IENvcnBvcmF0aW9uMR8wHQYDVQQLExZTeW1hbnRlYyBUcnVzdCBOZXR3b3JrMTEw
 # LwYDVQQDEyhTeW1hbnRlYyBTSEEyNTYgVGltZVN0YW1waW5nIFNpZ25lciAtIEcz
 # oIIKizCCBTgwggQgoAMCAQICEHsFsdRJaFFE98mJ0pwZnRIwDQYJKoZIhvcNAQEL
@@ -1381,13 +1231,13 @@ exit $ExitCode
 # BgNVBAoTFFN5bWFudGVjIENvcnBvcmF0aW9uMR8wHQYDVQQLExZTeW1hbnRlYyBU
 # cnVzdCBOZXR3b3JrMSgwJgYDVQQDEx9TeW1hbnRlYyBTSEEyNTYgVGltZVN0YW1w
 # aW5nIENBAhB71OWvuswHP6EBIwQiQU0SMAsGCWCGSAFlAwQCAaCBpDAaBgkqhkiG
-# 9w0BCQMxDQYLKoZIhvcNAQkQAQQwHAYJKoZIhvcNAQkFMQ8XDTIzMDUxNTEwNDE1
-# NFowLwYJKoZIhvcNAQkEMSIEIL8/K60mXh1FyzaYk4hwVgMOGPKp8M9K7pisnqDz
-# cLTtMDcGCyqGSIb3DQEJEAIvMSgwJjAkMCIEIMR0znYAfQI5Tg2l5N58FMaA+eKC
-# ATz+9lPvXbcf32H4MAsGCSqGSIb3DQEBAQSCAQBJj/OBxctaK11U1/Cv0rxP4fgV
-# 9KKW7nWieer5TbP7QJXiJx88gBo4sF5yg+DfkvALpDWujtDdGSq6d0DweNnRADB7
-# x8uHhGybC0+sQwbWe8haUL9qSaqEVOQ2LQxQ2TFXtXJEx+hIHvwbtL64dy1nD57W
-# BdhVf3Sgud0YgpA7B7x4bARWFiz9KQY9AhUq/cZN9OWYTq59T2f4l3zDBAf7d3ni
-# JAF5Omx4OEsWzfbvEwe3WxtWenFk4QhlaDlj4xVQzJQgYDOeebd74uFjRpY+ohnJ
-# 0RSC2IMQzxz1bvdGx1tO8NpFgJy6E7JoWEqiZA+PgpqWoUy7EaErjArL7Htt
+# 9w0BCQMxDQYLKoZIhvcNAQkQAQQwHAYJKoZIhvcNAQkFMQ8XDTIzMDUyMzE2MjM1
+# MFowLwYJKoZIhvcNAQkEMSIEILXLrJkZ0xoUP/IEYyB2akrAOSpVnYW7TRzk0Yqj
+# gppIMDcGCyqGSIb3DQEJEAIvMSgwJjAkMCIEIMR0znYAfQI5Tg2l5N58FMaA+eKC
+# ATz+9lPvXbcf32H4MAsGCSqGSIb3DQEBAQSCAQAH9bWOa+0tmCQ26CaDCprd56nR
+# 8/jX2Eadd7cvDbBaJodEuBrS+epgNAZaBlsv+X+7TrnMyNanOkgdcg6Gc0tK8x3R
+# 2X+BpSTHgyWc/QmngljQLDf6hHsp6McAIgmV+YVeYWBTNorOOwKpJXHk/rHfwrRp
+# pseaa7KYpT64eO5DNQThO0JUPvmm4qqH6EPJz8ltLi2Okt4rifT/ZsUyG01yxHNs
+# PnNeDAdOSFyt4jib6EzFQzeCJqDiV7li2WI7M388ac9eZsfIP/Oy173Vvwyo3FSr
+# tiO/IbahCdMiNnioNoQ80W/RkgK+F7hPw3OIwWlkfhiqgU/yDEj4zLWIWLT6
 # SIG # End signature block

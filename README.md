@@ -64,6 +64,9 @@ Commandline mode
 Fido supports commandline mode whereas, whenever one of the following options is provided, a GUI is not instantiated
 and you can instead generate the ISO download from within a PowerShell console or script.
 
+Note however that, as of 2023.05, Microsoft has removed access to older releases of Windows ISOs and as a result, the
+list of releases that can be downloaded from Fido has had to be reduced to only the latest for each version.
+
 The options are:
 - `Win`: Specify Windows version (e.g. _"Windows 10"_). Abbreviated version should work as well (e.g `-Win 10`) as long
    as it is unique enough. If this option isn't specified, the most recent version of Windows is automatically selected.
