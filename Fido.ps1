@@ -783,7 +783,7 @@ if ($Cmd) {
 		}
 		$i++
 	}
-	if ($winVersionId -eq $null) {
+	if ($null -eq $winVersionId) {
 		if ($Win -ne "List") {
 			Write-Host "Invalid Windows version provided."
 			Write-Host "Use '-Win List' for a list of available Windows versions."
@@ -808,7 +808,7 @@ if ($Cmd) {
 			break;
 		}
 	}
-	if ($winReleaseId -eq $null) {
+	if ($null -eq $winReleaseId) {
 		if ($Rel -ne "List") {
 			Write-Host "Invalid Windows release provided."
 			Write-Host "Use '-Rel List' for a list of available $Selected releases or '-Rel Latest' for latest."
@@ -833,7 +833,7 @@ if ($Cmd) {
 			break;
 		}
 	}
-	if ($winEditionId -eq $null) {
+	if ($null -eq $winEditionId) {
 		if ($Ed -ne "List") {
 			Write-Host "Invalid Windows edition provided."
 			Write-Host "Use '-Ed List' for a list of available editions or remove the -Ed parameter to use default."
@@ -898,7 +898,7 @@ if ($Cmd) {
 		}
 		$i++
 	}
-	if ($winLink -eq $null) {
+	if ($null -eq $winLink) { # used left side of equality operator
 		if ($Arch -ne "List") {
 			Write-Host "Invalid Windows architecture provided."
 			Write-Host "Use '-Arch List' for a list of available architectures or remove the option to use system default."
