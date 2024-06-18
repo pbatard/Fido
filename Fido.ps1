@@ -1,5 +1,5 @@
 ﻿#
-# Fido v1.56 - Feature ISO Downloader, for retail Windows images and UEFI Shell
+# Fido v1.57 - Feature ISO Downloader, for retail Windows images and UEFI Shell
 # Copyright © 2019-2024 Pete Batard <pete@akeo.ie>
 # Command line support: Copyright © 2021 flx5
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
@@ -519,8 +519,8 @@ function Check-Locale
 		# Also: "Hi Microsoft. You sure have A LOT OF RESOURCES TO WASTE to have assigned folks of yours to cripple scripts
 		# that merely exist because you have chosen to make the user experience from your download website utterly subpar.
 		# And while I am glad senpai noticed me (UwU), I feel compelled to ask: Don't you guys have better things to do?"
-		curl -UseBasicParsing -TimeoutSec $DefaultTimeout -MaximumRedirection 0 $url | Out-Null
-		curl -UseBasicParsing -TimeoutSec $DefaultTimeout -MaximumRedirection 0 -UserAgent $UserAgent $url | Out-Null
+		Invoke-WebRequest -UseBasicParsing -TimeoutSec $DefaultTimeout -MaximumRedirection 0 $url | Out-Null
+		Invoke-WebRequest -UseBasicParsing -TimeoutSec $DefaultTimeout -MaximumRedirection 0 -UserAgent $UserAgent $url | Out-Null
 	} catch {
 		# Of course PowerShell 7 had to BREAK $_.Exception.Status on timeouts...
 		if ($_.Exception.Status -eq "Timeout" -or $_.Exception.GetType().Name -eq "TaskCanceledException") {
@@ -580,7 +580,7 @@ function Get-Windows-Languages([int]$SelectedVersion, [int]$SelectedEdition)
 			Write-Host Querying $url
 		}
 		try {
-			curl -UseBasicParsing -TimeoutSec $DefaultTimeout -MaximumRedirection 0 -UserAgent $UserAgent $url | Out-Null
+			Invoke-WebRequest -UseBasicParsing -TimeoutSec $DefaultTimeout -MaximumRedirection 0 -UserAgent $UserAgent $url | Out-Null
 		} catch {
 			Error($_.Exception.Message)
 			return @()
@@ -599,7 +599,7 @@ function Get-Windows-Languages([int]$SelectedVersion, [int]$SelectedEdition)
 
 		$script:SelectedIndex = 0
 		try {
-			$r = curl -Method Post -UseBasicParsing -TimeoutSec $DefaultTimeout -UserAgent $UserAgent -SessionVariable "Session" $url
+			$r = Invoke-WebRequest -Method Post -UseBasicParsing -TimeoutSec $DefaultTimeout -UserAgent $UserAgent -SessionVariable "Session" $url
 			if ($r -match "errorModalMessage") {
 				Throw-Error -Req $r -Alt "Could not retrieve languages from server"
 			}
@@ -689,7 +689,7 @@ function Get-Windows-Download-Links([int]$SelectedVersion, [int]$SelectedRelease
 			$Is64 = [Environment]::Is64BitOperatingSystem
 			# Must add a referer for this request, else Microsoft's servers will deny it
 			$ref = "https://www.microsoft.com/software-download/windows11"
-			$r = curl -Method Post -Headers @{ "Referer" = $ref } -UseBasicParsing -TimeoutSec $DefaultTimeout -UserAgent $UserAgent -WebSession $Session $url
+			$r = Invoke-WebRequest -Method Post -Headers @{ "Referer" = $ref } -UseBasicParsing -TimeoutSec $DefaultTimeout -UserAgent $UserAgent -WebSession $Session $url
 			if ($r -match "errorModalMessage") {
 				$Alt = [regex]::Match($r.Content, '<p id="errorModalMessage">(.+?)<\/p>').Groups[1].Value -replace "<[^>]+>" -replace "\s+", " " -replace "\?\?\?", "-"
 				$Alt = [System.Text.Encoding]::UTF8.GetString([byte[]][char[]]$Alt)
@@ -742,7 +742,7 @@ function Process-Download-Link([string]$Url)
 				$pattern = '.*\/(.*\.iso).*'
 				$File = [regex]::Match($Url, $pattern).Groups[1].Value
 				# PowerShell implicit conversions are iffy, so we need to force them...
-				$str_size = (curl -UseBasicParsing -TimeoutSec $DefaultTimeout -Uri $Url -Method Head).Headers.'Content-Length'
+				$str_size = (Invoke-WebRequest -UseBasicParsing -TimeoutSec $DefaultTimeout -Uri $Url -Method Head).Headers.'Content-Length'
 				$tmp_size = [uint64]::Parse($str_size)
 				$Size = Size-To-Human-Readable $tmp_size
 				Write-Host "Downloading '$File' ($Size)..."
@@ -1075,8 +1075,8 @@ exit $ExitCode
 # SIG # Begin signature block
 # MIIkWAYJKoZIhvcNAQcCoIIkSTCCJEUCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCD+x1KfwoalW3t
-# +j1Qn14VTLu8yO8vHTqfh8WnOWfDH6CCElkwggVvMIIEV6ADAgECAhBI/JO0YFWU
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB6/hZgyGy5PCvt
+# gCtQT/nZSZCBsJLelhii59nr9meeYqCCElkwggVvMIIEV6ADAgECAhBI/JO0YFWU
 # jTanyYqJ1pQWMA0GCSqGSIb3DQEBDAUAMHsxCzAJBgNVBAYTAkdCMRswGQYDVQQI
 # DBJHcmVhdGVyIE1hbmNoZXN0ZXIxEDAOBgNVBAcMB1NhbGZvcmQxGjAYBgNVBAoM
 # EUNvbW9kbyBDQSBMaW1pdGVkMSEwHwYDVQQDDBhBQUEgQ2VydGlmaWNhdGUgU2Vy
@@ -1179,22 +1179,22 @@ exit $ExitCode
 # aWMgQ29kZSBTaWduaW5nIENBIEVWIFIzNgIRAL+xUAG79ZLUlip3l+pzb6MwDQYJ
 # YIZIAWUDBAIBBQCgfDAQBgorBgEEAYI3AgEMMQIwADAZBgkqhkiG9w0BCQMxDAYK
 # KwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkqhkiG
-# 9w0BCQQxIgQgGLlbFsVdhuXuMotbf+NkjW7IVEdX7WTMcFCAXDiBTcYwDQYJKoZI
-# hvcNAQEBBQAEggIAGCROL07OfZ00X4+aD9myGgUL+My8yJteh76cI0ECth19gxgF
-# d+b9u8Wfagx9rs63CEJWZvoabdKt3kjQWccjhco1/gjFV/FG6vR7NQenEjt9nvVf
-# H8SNYrTKsnXQbWY2oVgfRhaWXOHFZC1Lb+V/ixqE13UuxdVhkLrksfF+InEVdG4k
-# N5yH67z5vcXe4OIGVdOAA0Fm9arUVLGbbQVETLugsMVqzwCH4whwyBqf6AsDry3P
-# suB3xMGvow25uqJeL6NkZv+t6UScpqfe0lDjUMicMampXRC/KBM0ISUso+sV5wFQ
-# 6Vj5ndq3Uorv5V6HaOaSJiQG9nTzdlphXAAsVAbK5UfSBEOnF70fZQJs77y9eSe3
-# wBJalz7G7HVZ03Tm8e4HR5+Z5XpYT6wWNQbq46ztJn10ypGnReMnTGiA5J+mT5Ji
-# HBHUYkIQAi3kEf3U/GXkq9lliexVZdisDAEX471nyff3iyw08ieZAFUgPsKd/lBY
-# 0cyotndhtaRN39GPMLWenFoiXW8datVk9Dco1eDU8YUO8hOAoV8BJ+XwL7hqk+m3
-# 3uebSME1F/CIyocqUJB9AcUADXN+gsG1w9w/vo8HM0FXbiEhUen/S8JhGvYijSAH
-# nFEgn0kK2a0bvPN+Yrttzd/mJRgC/lvR+0K35/izie8bp0HSxkAj2UWgb4ihgg48
+# 9w0BCQQxIgQgjGvMX1KUGmTAG0n1x4MezO453CpVTtVYSdFxGu+1e6MwDQYJKoZI
+# hvcNAQEBBQAEggIALNCfDs1MxfpLMhXG2grYBt5l4UBrnaQ04a5lZHAUU1X7BmwS
+# gr21XmYKQRq82gwawyhq/ZRDpb4ba2Z7IQN7IRH0IBgZVwUeBE9ZEyYGQehLdF1Y
+# Q7F2rPODSEdrneR00+KTwN1+DSTNX213LRwjwV0f5Ieu5Bd4CelFpApkxkYcuybM
+# JSzkXnQOFm06ArNrwTKmlDXvLBKtgUyxsL3oT9xASqBGJx6i/SBbzKjyqD7+aVzq
+# COXgJCxAO5Wx2DHK+DUfvDfQy/NQ69icRm2AoMTxPI/by8sUbzYTK3dw/wCEQWnJ
+# ijVxnyUE98OsYejFtCxmpJzq3ST9+TTMXjHQyqztnxTIlGGGVw9aPqK9FHYpclgj
+# HeT9LWreOdkA4VCdxKYhh0vG7RKPyQzZLSC1BRY4Y8iLWupDPTEfP8LZeE0XeLaO
+# McSggDRzz+AKbraqn9LWRF4MRAW3V4Aa8tT1LPm4fT1N2mt7r9aNyYcaqMWs5/TR
+# 9vohkS8lbV5+QX5cDC8n1VborV9QzLM/mPXK/4PSoVuRLVHkZ9FLMRpEf/pBJ7nY
+# HhXeS2HZ1CAp0xGqj6CUtu0+808D0u07HA4ic4WOdzSfVvgYyCJ4BXg0xVoHR0tf
+# ox7Xa1FVa0hq7q6i4+tHC8AQl1LDodec1qrrL1ULEK8kU+x9JZuwm/OqIU2hgg48
 # MIIOOAYKKwYBBAGCNwMDATGCDigwgg4kBgkqhkiG9w0BBwKggg4VMIIOEQIBAzEN
 # MAsGCWCGSAFlAwQCATCCAQ4GCyqGSIb3DQEJEAEEoIH+BIH7MIH4AgEBBgtghkgB
-# hvhFAQcXAzAxMA0GCWCGSAFlAwQCAQUABCCR48Y7/BdjE4WMJ3MTfFvvKHO/MTEE
-# pmvjIcKiDXqFggIUUKVLvq/Rere22pEN7bPPypbSx4kYDzIwMjQwNTMwMTIxNTU3
+# hvhFAQcXAzAxMA0GCWCGSAFlAwQCAQUABCCpTBNKrwFwdHYx5MKSLOIsjhyUcRDn
+# ors0b8ClDUtZzwIUGHuZJSxXXydSQjJMKzqMARfqbXIYDzIwMjQwNjE4MTEwNzQ1
 # WjADAgEeoIGGpIGDMIGAMQswCQYDVQQGEwJVUzEdMBsGA1UEChMUU3ltYW50ZWMg
 # Q29ycG9yYXRpb24xHzAdBgNVBAsTFlN5bWFudGVjIFRydXN0IE5ldHdvcmsxMTAv
 # BgNVBAMTKFN5bWFudGVjIFNIQTI1NiBUaW1lU3RhbXBpbmcgU2lnbmVyIC0gRzOg
@@ -1258,13 +1258,13 @@ exit $ExitCode
 # A1UEChMUU3ltYW50ZWMgQ29ycG9yYXRpb24xHzAdBgNVBAsTFlN5bWFudGVjIFRy
 # dXN0IE5ldHdvcmsxKDAmBgNVBAMTH1N5bWFudGVjIFNIQTI1NiBUaW1lU3RhbXBp
 # bmcgQ0ECEHvU5a+6zAc/oQEjBCJBTRIwCwYJYIZIAWUDBAIBoIGkMBoGCSqGSIb3
-# DQEJAzENBgsqhkiG9w0BCRABBDAcBgkqhkiG9w0BCQUxDxcNMjQwNTMwMTIxNTU3
-# WjAvBgkqhkiG9w0BCQQxIgQgfg9VtUU2OnGoPQzBzGTbTgCT1w6jp7BxXaoKjZml
-# N6owNwYLKoZIhvcNAQkQAi8xKDAmMCQwIgQgxHTOdgB9AjlODaXk3nwUxoD54oIB
-# PP72U+9dtx/fYfgwCwYJKoZIhvcNAQEBBIIBAKiMf+Bo+QGtVkZBMEwMnI59Codn
-# /T20P0U9weTi03tqkmrxLsk4lyFEbXvcFvnjNfVZhJKUP/BQjVQMXwbJRiRGOkwB
-# jij+VjChUZg4P1E2cIhJWwh48DR26/21xKQoU2IqsFgjZ4STFuR7b/ccJ07EQN8Z
-# Fgd9Ig+Ie2YdHkW4zXKFfQlNOwIyxdrfV8JIurWdaR3rXeh/lrnbBBYaxuX0O9+N
-# hgbgQomjY+YJWnli0UJAHSJjErhMFuaSAKgezbixoINfPYMhbjotimdNl4GMj2yw
-# 9AV+b99mhk6piJwIDuY0GYr4IaCIju46HzgtUDVgNPG3oJrWrFLCRNZuk7E=
+# DQEJAzENBgsqhkiG9w0BCRABBDAcBgkqhkiG9w0BCQUxDxcNMjQwNjE4MTEwNzQ1
+# WjAvBgkqhkiG9w0BCQQxIgQgaLj4rStyAc4gYIJwBDnf1sEWzST3OsOyweYfm5EZ
+# XRswNwYLKoZIhvcNAQkQAi8xKDAmMCQwIgQgxHTOdgB9AjlODaXk3nwUxoD54oIB
+# PP72U+9dtx/fYfgwCwYJKoZIhvcNAQEBBIIBAIeZ3ykedA8RCnxesyKjJCB1j97D
+# 4CzvrQzrWlYg+D/A/4QuYXiCirn0q2ONq61EmH6c/zqC4vRwsGfVGFkQqb9GeC0e
+# JAxqubqBcqdN3aTGdjEkv7BQmxi3OLjcTgS0nsQrkPQD46YOX2Mtx2pt8LqsRKyi
+# bhhN6WG40hrUnOQFts6pcL6PhFSth7xMh6h/LW9x20R2HBpzvRi8xmK80H7NPH4v
+# optllo3Cu6xzp1RSDcsbaCx7YopMjIJbqIQf11YMvE52beHFZnZPz1tTPZaNqzvb
+# Ln1K6LDZP6Zpw9OUvDR2UIRCBCLkw/CYWFx75OpbQgNBoDnZKsdjj1x5WgI=
 # SIG # End signature block
