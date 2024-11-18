@@ -1,5 +1,5 @@
-Fido: A PowerShell download script for Microsoft Windows and UEFI Shell ISOs
-============================================================================
+Fido: A PowerShell script to download Windows and UEFI Shell ISOs
+=================================================================
 
 [![Licence](https://img.shields.io/badge/license-GPLv3-blue.svg?style=flat-square)](https://www.gnu.org/licenses/gpl-3.0.en.html)
 [![Github stats](https://img.shields.io/github/downloads/pbatard/Fido/total.svg?style=flat-square)](https://github.com/pbatard/Fido/releases)

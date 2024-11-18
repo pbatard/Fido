@@ -1,5 +1,5 @@
 ﻿#
-# Fido v1.60 - Feature ISO Downloader, for retail Windows images and UEFI Shell
+# Fido v1.61 - Feature ISO Downloader, for retail Windows images and UEFI Shell
 # Copyright © 2019-2024 Pete Batard <pete@akeo.ie>
 # Command line support: Copyright © 2021 flx5
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
@@ -139,9 +139,11 @@ $WindowsVersions = @(
 		@("Windows 11", "windows11"),
 		@(
 			"24H2 (Build 26100.1742 - 2024.10)",
-			@("Windows 11 Home/Pro/Edu", 3113),
-			@("Windows 11 Home China ", ($zh + 3115))
-			@("Windows 11 Pro China ", ($zh + 3114))
+			# Thanks to Microsoft's hare-brained decision not to treat ARM64 as a CPU arch,
+			# like they did for x86 and x64, we have to handle multiple IDs for each release...
+			@("Windows 11 Home/Pro/Edu", @(3113, 3131)),
+			@("Windows 11 Home China ", @(3115, 3132)),
+			@("Windows 11 Pro China ", @(3114, 3133))
 		)
 	),
 	@(
@@ -149,7 +151,7 @@ $WindowsVersions = @(
 		@(
 			"22H2 v1 (Build 19045.2965 - 2023.05)",
 			@("Windows 10 Home/Pro/Edu", 2618),
-			@("Windows 10 Home China ", ($zh + 2378))
+			@("Windows 10 Home China ", 2378)
 		)
 	)
 	@(
@@ -379,6 +381,23 @@ function Get-Translation([string]$Text)
 	return $Text
 }
 
+# Get the underlying *native* CPU architecture
+function Get-Arch
+{
+	$Arch = Get-CimInstance -ClassName Win32_Processor | Select-Object -ExpandProperty Architecture
+	switch($Arch) {
+	0  { return "x86" }
+	1  { return "MIPS" }
+	2  { return "Alpha" }
+	3  { return "PowerPC" }
+	5  { return "ARM32" }
+	6  { return "IA64" }
+	9  { return "x64" }
+	12 { return "ARM64" }
+	default { return "Unknown"}
+	}
+}
+
 # Some PowerShells don't have Microsoft.mshtml assembly (comes with MS Office?)
 # so we can't use ParsedHtml or IHTMLDocument[2|3] features there...
 function GetElementById([object]$Request, [string]$Id)
@@ -441,7 +460,10 @@ if ($Cmd) {
 	$ltrm = ""
 }
 $MaxStage = 4
-$SessionId = [guid]::NewGuid()
+# Can't reuse the same sessionId for x64 and ARM64. The Microsoft servers
+# are purposefully designed to ever process one specific download request
+# that matches the last SKUs retrieved.
+$SessionId = @($null) * 2
 $ExitCode = 100
 $Locale = $Locale
 $RequestData = @{}
@@ -461,6 +483,7 @@ if ($Debug) {
 } elseif ($Cmd -and $GetUrl) {
 	$Verbosity = 0
 }
+$PlatformArch = Get-Arch
 #endregion
 
 # Localization
@@ -550,77 +573,89 @@ function Get-Windows-Editions([int]$SelectedVersion, [int]$SelectedRelease)
 }
 
 # Return an array of languages for the selected edition
-function Get-Windows-Languages([int]$SelectedVersion, [int]$SelectedEdition)
+function Get-Windows-Languages([int]$SelectedVersion, [object]$SelectedEdition)
 {
-	$languages = @()
-	$i = 0;
+	$langs = @()
 	if ($WindowsVersions[$SelectedVersion][0][1].StartsWith("UEFI_SHELL")) {
-		$languages += @(New-Object PsObject -Property @{ DisplayLanguage = "English (US)"; Language = "en-us"; Id = 0 })
+		$langs += @(New-Object PsObject -Property @{ DisplayName = "English (US)"; Name = "en-us"; Data = @($null) })
 	} else {
-		# Microsoft download protection now requires the sessionId to be whitelisted through vlscppe.microsoft.com/tags
-		$url = "https://vlscppe.microsoft.com/tags?org_id=y6jn8c31&session_id=" + $SessionId
-		if ($Verbosity -ge 2) {
-			Write-Host Querying $url
-		}
-		try {
-			Invoke-WebRequest -UseBasicParsing -TimeoutSec $DefaultTimeout -MaximumRedirection 0 -UserAgent $UserAgent $url | Out-Null
-		} catch {
-			Error($_.Exception.Message)
-			return @()
-		}
-		$url = "https://www.microsoft.com/" + $QueryLocale + "/api/controls/contentinclude/html"
-		$url += "?pageId=" + $RequestData["GetLangs"][0]
-		$url += "&host=www.microsoft.com"
-		$url += "&segments=software-download," + $WindowsVersions[$SelectedVersion][0][1]
-		$url += "&query=&action=" + $RequestData["GetLangs"][1]
-		$url += "&sessionId=" + $SessionId
-		$url += "&productEditionId=" + $SelectedEdition
-		$url += "&sdVersion=2"
-		if ($Verbosity -ge 2) {
-			Write-Host Querying $url
-		}
-
-		$script:SelectedIndex = 0
-		try {
-			$r = Invoke-WebRequest -Method Post -UseBasicParsing -TimeoutSec $DefaultTimeout -UserAgent $UserAgent -SessionVariable "Session" $url
-			if ($Verbosity -ge 5) {
-				Write-Host "=============================================================================="
-				Write-Host $r
-				Write-Host "=============================================================================="
+		$languages = [ordered]@{}
+		$SessionIndex = 0
+		foreach ($EditionId in $SelectedEdition) {
+			$SessionId[$SessionIndex] = [guid]::NewGuid()
+			# Microsoft download protection now requires the sessionId to be whitelisted through vlscppe.microsoft.com/tags
+			$url = "https://vlscppe.microsoft.com/tags?org_id=y6jn8c31&session_id=" + $SessionId[$SessionIndex]
+			if ($Verbosity -ge 2) {
+				Write-Host Querying $url
 			}
-			if ($r -match "errorModalMessage") {
-				Throw-Error -Req $r -Alt "Could not retrieve languages from server"
+			try {
+				Invoke-WebRequest -UseBasicParsing -TimeoutSec $DefaultTimeout -MaximumRedirection 0 -UserAgent $UserAgent $url | Out-Null
+			} catch {
+				Error($_.Exception.Message)
+				return @()
 			}
-			$r = $r -replace "`n" -replace "`r"
-			$pattern = '.*<select id="product-languages"[^>]*>(.*)</select>.*'
-			$html = [regex]::Match($r, $pattern).Groups[1].Value
-			# Go through an XML conversion to keep all PowerShells happy...
-			$html = $html.Replace("selected value", "value")
-			$html = "<options>" + $html + "</options>"
-			$xml = [xml]$html
-			foreach ($var in $xml.options.option) {
-				$json = $var.value | ConvertFrom-Json;
-				if ($json) {
-					$languages += @(New-Object PsObject -Property @{ DisplayLanguage = $var.InnerText; Language = $json.language; Id = $json.id })
-					if (Select-Language($json.language)) {
-						$script:SelectedIndex = $i
-					}
-					$i++
+			$url = "https://www.microsoft.com/" + $QueryLocale + "/api/controls/contentinclude/html"
+			$url += "?pageId=" + $RequestData["GetLangs"][0]
+			$url += "&host=www.microsoft.com"
+			$url += "&segments=software-download," + $WindowsVersions[$SelectedVersion][0][1]
+			$url += "&query=&action=" + $RequestData["GetLangs"][1]
+			$url += "&sessionId=" + $SessionId[$SessionIndex]
+			$url += "&productEditionId=" + $EditionId
+			$url += "&sdVersion=2"
+			if ($Verbosity -ge 2) {
+				Write-Host Querying $url
+			}
+			try {
+				$r = Invoke-WebRequest -Method Post -UseBasicParsing -TimeoutSec $DefaultTimeout -UserAgent $UserAgent -SessionVariable "Session" $url
+				if ($Verbosity -ge 5) {
+					Write-Host "=============================================================================="
+					Write-Host $r
+					Write-Host "=============================================================================="
 				}
+				if ($r -match "errorModalMessage") {
+					Throw-Error -Req $r -Alt "Could not retrieve languages from server"
+				}
+				$r = $r -replace "`n" -replace "`r"
+				$pattern = '.*<select id="product-languages"[^>]*>(.*)</select>.*'
+				$html = [regex]::Match($r, $pattern).Groups[1].Value
+				# Go through an XML conversion to keep all PowerShells happy...
+				$html = $html.Replace("selected value", "value")
+				$html = "<options>" + $html + "</options>"
+				$xml = [xml]$html
+				foreach ($var in $xml.options.option) {
+					$json = $var.value | ConvertFrom-Json;
+					if ($json) {
+						if (!$languages.Contains($json.language)) {
+							$languages[$json.language] = @{ DisplayName = $var.InnerText; Data = @() }
+						}
+						$languages[$json.language].Data += @{ SessionIndex = $SessionIndex; SkuId = $json.id }
+					}
+				}
+				if ($languages.Length -eq 0) {
+					Throw-Error -Req $r -Alt "Could not parse languages"
+				}
+			} catch {
+				Error($_.Exception.Message)
+				return @()
 			}
-			if ($languages.Length -eq 0) {
-				Throw-Error -Req $r -Alt "Could not parse languages"
+			$SessionIndex++
+		}
+		# Need to convert to an array since PowerShell treats them differently from hashtable
+		$i = 0
+		$script:SelectedIndex = 0
+		foreach($language in $languages.Keys) {
+			$langs += @(New-Object PsObject -Property @{ DisplayName = $languages[$language].DisplayName; Name = $language; Data = $languages[$language].Data })
+			if (Select-Language($language)) {
+				$script:SelectedIndex = $i
 			}
-		} catch {
-			Error($_.Exception.Message)
-			return @()
+			$i++
 		}
 	}
-	return $languages
+	return $langs
 }
 
 # Return an array of download links for each supported arch
-function Get-Windows-Download-Links([int]$SelectedVersion, [int]$SelectedRelease, [int]$SelectedEdition, [string]$SkuId, [string]$LanguageName)
+function Get-Windows-Download-Links([int]$SelectedVersion, [int]$SelectedRelease, [object]$SelectedEdition, [PSCustomObject]$SelectedLanguage)
 {
 	$links = @()
 	if ($WindowsVersions[$SelectedVersion][0][1].StartsWith("UEFI_SHELL")) {
@@ -647,74 +682,79 @@ function Get-Windows-Download-Links([int]$SelectedVersion, [int]$SelectedRelease
 				$archs += $sep + $arch
 				$sep = ", "
 			}
-			$links += @(New-Object PsObject -Property @{ Type = $archs; Link = $link })
+			$links += @(New-Object PsObject -Property @{ Type = $archs; Url = $link })
 		} catch {
 			Error($_.Exception.Message)
 			return @()
 		}
 	} else {
-		$url = "https://www.microsoft.com/" + $QueryLocale + "/api/controls/contentinclude/html"
-		$url += "?pageId=" + $RequestData["GetLinks"][0]
-		$url += "&host=www.microsoft.com"
-		$url += "&segments=software-download," + $WindowsVersions[$SelectedVersion][0][1]
-		$url += "&query=&action=" + $RequestData["GetLinks"][1]
-		$url += "&sessionId=" + $SessionId
-		$url += "&skuId=" + $SkuId
-		$url += "&language=" + $LanguageName
-		$url += "&sdVersion=2"
-		if ($Verbosity -ge 2) {
-			Write-Host Querying $url
-		}
+		foreach ($Entry in $SelectedLanguage.Data) {
+			$url = "https://www.microsoft.com/" + $QueryLocale + "/api/controls/contentinclude/html"
+			$url += "?pageId=" + $RequestData["GetLinks"][0]
+			$url += "&host=www.microsoft.com"
+			$url += "&segments=software-download," + $WindowsVersions[$SelectedVersion][0][1]
+			$url += "&query=&action=" + $RequestData["GetLinks"][1]
+			$url += "&sessionId=" + $SessionId[$Entry.SessionIndex]
+			$url += "&skuId=" + $Entry.SkuId
+			$url += "&language=" + $SelectedLanguage.Name
+			$url += "&sdVersion=2"
+			if ($Verbosity -ge 2) {
+				Write-Host Querying $url
+			}
 
+			try {
+				# Must add a referer for this request, else Microsoft's servers will deny it
+				$ref = "https://www.microsoft.com/software-download/windows11"
+				$r = Invoke-WebRequest -Method Post -Headers @{ "Referer" = $ref } -UseBasicParsing -TimeoutSec $DefaultTimeout -UserAgent $UserAgent -WebSession $Session $url
+				if ($Verbosity -ge 5) {
+					Write-Host "=============================================================================="
+					Write-Host $r
+					Write-Host "=============================================================================="
+				}
+				if ($r -match "errorModalMessage") {
+					$Alt = [regex]::Match($r.Content, '<p id="errorModalMessage">(.+?)<\/p>').Groups[1].Value -replace "<[^>]+>" -replace "\s+", " " -replace "\?\?\?", "-"
+					$Alt = [System.Text.Encoding]::UTF8.GetString([byte[]][char[]]$Alt)
+					if (!$Alt) {
+						$Alt = "Could not retrieve architectures from server"
+					} elseif ($Alt -match "715-123130") {
+						$Alt += " " + $SessionId[$Entry.SessionIndex] + "."
+					}
+					Throw-Error -Req $r -Alt $Alt
+				}
+				$pattern = '(?s)(<input.*?></input>)'
+				ForEach-Object { [regex]::Matches($r, $pattern) } | ForEach-Object { $html += $_.Groups[1].value }
+				# Need to fix the HTML and JSON data so that it is well-formed
+				$html = $html.Replace("class=product-download-hidden", "")
+				$html = $html.Replace("type=hidden", "")
+				$html = $html.Replace("&nbsp;", " ")
+				$html = $html.Replace("IsoX86", "&quot;x86&quot;")
+				$html = $html.Replace("IsoX64", "&quot;x64&quot;")
+				# As usual Microsoft's left hand is completely uncoordinated with right hand
+				$html = $html.Replace("Unknown", "&quot;ARM64&quot;")
+				$html = "<inputs>" + $html + "</inputs>"
+				$xml = [xml]$html
+				foreach ($var in $xml.inputs.input) {
+					$json = $var.value | ConvertFrom-Json;
+					if ($json) {
+						$links += @(New-Object PsObject -Property @{ Type = $json.DownloadType; Url = $json.Uri })
+					}
+				}
+				if ($links.Length -eq 0) {
+					Throw-Error -Req $r -Alt "Could not retrieve ISO download links"
+				}
+			} catch {
+				Error($_.Exception.Message)
+				return @()
+			}
+			$SessionIndex++
+		}
 		$i = 0
 		$script:SelectedIndex = 0
-
-		try {
-			$Is64 = [Environment]::Is64BitOperatingSystem
-			# Must add a referer for this request, else Microsoft's servers will deny it
-			$ref = "https://www.microsoft.com/software-download/windows11"
-			$r = Invoke-WebRequest -Method Post -Headers @{ "Referer" = $ref } -UseBasicParsing -TimeoutSec $DefaultTimeout -UserAgent $UserAgent -WebSession $Session $url
-			if ($Verbosity -ge 5) {
-				Write-Host "=============================================================================="
-				Write-Host $r
-				Write-Host "=============================================================================="
+		foreach($link in $links) {
+			if ($link.Type -eq $PlatformArch) {
+				$script:SelectedIndex = $i
 			}
-			if ($r -match "errorModalMessage") {
-				$Alt = [regex]::Match($r.Content, '<p id="errorModalMessage">(.+?)<\/p>').Groups[1].Value -replace "<[^>]+>" -replace "\s+", " " -replace "\?\?\?", "-"
-				$Alt = [System.Text.Encoding]::UTF8.GetString([byte[]][char[]]$Alt)
-				if (!$Alt) {
-					$Alt = "Could not retrieve architectures from server"
-				} elseif ($Alt -match "715-123130") {
-					$Alt += " " + $SessionId + "."
-				}
-				Throw-Error -Req $r -Alt $Alt
-			}
-			$pattern = '(?s)(<input.*?></input>)'
-			ForEach-Object { [regex]::Matches($r, $pattern) } | ForEach-Object { $html += $_.Groups[1].value }
-			# Need to fix the HTML and JSON data so that it is well-formed
-			$html = $html.Replace("class=product-download-hidden", "")
-			$html = $html.Replace("type=hidden", "")
-			$html = $html.Replace("&nbsp;", " ")
-			$html = $html.Replace("IsoX86", "&quot;x86&quot;")
-			$html = $html.Replace("IsoX64", "&quot;x64&quot;")
-			$html = "<inputs>" + $html + "</inputs>"
-			$xml = [xml]$html
-			foreach ($var in $xml.inputs.input) {
-				$json = $var.value | ConvertFrom-Json;
-				if ($json) {
-					if (($Is64 -and $json.DownloadType -eq "x64") -or (!$Is64 -and $json.DownloadType -eq "x86")) {
-						$script:SelectedIndex = $i
-					}
-					$links += @(New-Object PsObject -Property @{ Type = $json.DownloadType; Link = $json.Uri })
-					$i++
-				}
-			}
-			if ($links.Length -eq 0) {
-				Throw-Error -Req $r -Alt "Could not retrieve ISO download links"
-			}
-		} catch {
-			Error($_.Exception.Message)
-			return @()
+			$i++
 		}
 	}
 	return $links
@@ -848,21 +888,21 @@ if ($Cmd) {
 		$Lang = $Lang.replace(')', '\)')
 	}
 	$i = 0
+	$winLanguage = $null
 	foreach ($language in $languages) {
 		if ($Lang -eq "List") {
-			Write-Host " -" $language.Language
-		} elseif ((!$Lang -and $script:SelectedIndex -eq $i) -or ($Lang -and $language.Language -match $Lang)) {
+			Write-Host " -" $language.Name
+		} elseif ((!$Lang -and $script:SelectedIndex -eq $i) -or ($Lang -and $language.Name -match $Lang)) {
 			if (!$Lang -and $Verbosity -ge 1) {
-				Write-Host "No language specified (-Lang). Defaulting to '$($language.Language)'."
+				Write-Host "No language specified (-Lang). Defaulting to '$($language.Name)'."
 			}
-			$Selected += ", " + $language.Language
-			$winLanguageId = $language.Id
-			$winLanguageName = $language.Language
+			$Selected += ", " + $language.Name
+			$winLanguage = $language
 			break;
 		}
 		$i++
 	}
-	if (!$winLanguageId -or !$winLanguageName) {
+	if ($winLanguage -eq $null) {
 		if ($Lang -ne "List") {
 			Write-Host "Invalid Windows language provided."
 			Write-Host "Use '-Lang List' for a list of available languages or remove the option to use system default."
@@ -871,7 +911,7 @@ if ($Cmd) {
 	}
 
 	# Language selection => Request and populate Arch download links
-	$links = Get-Windows-Download-Links $winVersionId $winReleaseId $winEditionId $winLanguageId $winLanguageName
+	$links = Get-Windows-Download-Links $winVersionId $winReleaseId $winEditionId $winLanguage
 	if (!$links) {
 		exit 3
 	}
@@ -902,11 +942,11 @@ if ($Cmd) {
 
 	# Arch selection => Return selected download link
 	if ($GetUrl) {
-		Return $winLink.Link
+		return $winLink.Url
 		$ExitCode = 0
 	} else {
 		Write-Host "Selected: $Selected"
-		$ExitCode = Process-Download-Link $winLink.Link
+		$ExitCode = Process-Download-Link $winLink.Url
 	}
 
 	# Clean up & exit
@@ -980,7 +1020,7 @@ $Continue.add_click({
 			if ($languages.Length -eq 0) {
 				break
 			}
-			$script:Language = Add-Entry $Stage "Language" $languages "DisplayLanguage"
+			$script:Language = Add-Entry $Stage "Language" $languages "DisplayName"
 			$Language.SelectedIndex = $script:SelectedIndex
 			$XMLForm.Title = $AppTitle
 		}
@@ -988,7 +1028,7 @@ $Continue.add_click({
 		4 { # Language selection => Request and populate Arch download links
 			$XMLForm.Title = Get-Translation($English[12])
 			Refresh-Control($XMLForm)
-			$links = Get-Windows-Download-Links $WindowsVersion.SelectedValue.Index $WindowsRelease.SelectedValue.Index $ProductEdition.SelectedValue.Id $Language.SelectedValue.Id $Language.SelectedValue.Language
+			$links = Get-Windows-Download-Links $WindowsVersion.SelectedValue.Index $WindowsRelease.SelectedValue.Index $ProductEdition.SelectedValue.Id $Language.SelectedValue
 			if ($links.Length -eq 0) {
 				break
 			}
@@ -1014,7 +1054,7 @@ $Continue.add_click({
 		}
 
 		5 { # Arch selection => Return selected download link
-			$script:ExitCode = Process-Download-Link $Architecture.SelectedValue.Link
+			$script:ExitCode = Process-Download-Link $Architecture.SelectedValue.Url
 			$XMLForm.Close()
 		}
 	}
@@ -1062,10 +1102,10 @@ $XMLForm.ShowDialog() | Out-Null
 exit $ExitCode
 
 # SIG # Begin signature block
-# MIItOwYJKoZIhvcNAQcCoIItLDCCLSgCAQExDzANBglghkgBZQMEAgEFADB5Bgor
+# MIItPAYJKoZIhvcNAQcCoIItLTCCLSkCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCxrIeJlOBDALvk
-# 3mpyUKDwXkqnbzHDj+/a4VP9siXsDKCCEkAwggVvMIIEV6ADAgECAhBI/JO0YFWU
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDFXTWq2lpU/6fR
+# Ct1W7yWDg6b1THz8JSMDTQ5AW7weJ6CCEkAwggVvMIIEV6ADAgECAhBI/JO0YFWU
 # jTanyYqJ1pQWMA0GCSqGSIb3DQEBDAUAMHsxCzAJBgNVBAYTAkdCMRswGQYDVQQI
 # DBJHcmVhdGVyIE1hbmNoZXN0ZXIxEDAOBgNVBAcMB1NhbGZvcmQxGjAYBgNVBAoM
 # EUNvbW9kbyBDQSBMaW1pdGVkMSEwHwYDVQQDDBhBQUEgQ2VydGlmaWNhdGUgU2Vy
@@ -1162,146 +1202,146 @@ exit $ExitCode
 # 4a6KRpYwLMYE9/ZBEBP7JpfiMt42q+QF6fyS8xauGiOGBOZW4ch7Wh+GBoe3JZUu
 # UPC4wZDC9LeRKz/otodtloaTEnW9YE9gPmfRttMWaNsQTg6y5sc74qLoVY0RSqcW
 # B2KScXAjuVHVkJJcOoPSuLoTjOhK3Ug4XbQmRypdteoizdTSnONGmW84RJyXquzi
-# rIjw9CnLTggrZiYi9EZTo7URWNaARqLbSFpu0VMkdOBpWdXq5F6x6jslMYIaUTCC
-# Gk0CAQEwazBXMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVk
+# rIjw9CnLTggrZiYi9EZTo7URWNaARqLbSFpu0VMkdOBpWdXq5F6x6jslMYIaUjCC
+# Gk4CAQEwazBXMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVk
 # MS4wLAYDVQQDEyVTZWN0aWdvIFB1YmxpYyBDb2RlIFNpZ25pbmcgQ0EgRVYgUjM2
 # AhA3xQo8HaADcccNx8YmkC/lMA0GCWCGSAFlAwQCAQUAoHwwEAYKKwYBBAGCNwIB
 # DDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGCNwIBCzEO
-# MAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIGM46kb2X7Tta6EzBf5sFOHn
-# kZs8JXPQ6S7zslesaMtyMA0GCSqGSIb3DQEBAQUABIICAAt+Ha2rXBbfAqyffw3X
-# wTE7ArUyfP5/LZRKlG0AqHePIargfwWoW7fkEWj/iEs1b5zmq4ayO+1/GC48+9wc
-# 4dIjVFDygrkBV9fSIox3LJRdqUsX0GaljEZOsxRaoPGDPF12eD3C9XfHzoGOuqYp
-# PJ+mXUHZKV8cUMluW6ftd1dB1WbHzOXPjmGjhArRcBtY+zduq0rXtgntHKQI4q1S
-# IYjjzeOjJ6KPxHe1ofFqFoIHlAd6vlHY5yqKeRouJm9HQ78eHlkUbHF+O5510KhE
-# p/a78zkAp2msVZRgA760ToCcn6UOkRxpdcopGqK1DAjGDBVmigO/y+HfMO8ghDB0
-# giFiudslRaGjsqkxAg1AGKFYGX9dT8jeEHixq5Z2YsihbGRVB0h5UDXqPrXCpAdt
-# isGIzV1fsRytVmVZilJiCDsDKyr5DmpGLZdVQ1IHTP+9mjgHRw4nFXxpZ20PeoVU
-# vVmZbvfbqYW7ZQOU0eiALrbYwElmVlqichZAPPRGXXofWhSUsb8yL9r+Mq7hNLqJ
-# pLT1CkYC5ZQ4x/WMXA5s33AvnDXaysMV1F9pb4FxlXTvjpEgMtTq9P2H/8hPw69S
-# S0y40VUc1ezRq2ymYp5ImwF5tkICdaOsUnAWKOpjLuV1v36D6FDPtTvzOGjF7HB0
-# j/Nl7galy6DGGQFU+yxT4Lk/oYIXOTCCFzUGCisGAQQBgjcDAwExghclMIIXIQYJ
-# KoZIhvcNAQcCoIIXEjCCFw4CAQMxDzANBglghkgBZQMEAgEFADB3BgsqhkiG9w0B
-# CRABBKBoBGYwZAIBAQYJYIZIAYb9bAcBMDEwDQYJYIZIAWUDBAIBBQAEIJZKXGyr
-# x8k7rMykpOPNslGoDQ1m4jNDs4aiAGaOGTwdAhB+ALXJmrWFN+0UCzQDCtR3GA8y
-# MDI0MTExNTEzMTMzNFqgghMDMIIGvDCCBKSgAwIBAgIQC65mvFq6f5WHxvnpBOMz
-# BDANBgkqhkiG9w0BAQsFADBjMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNl
-# cnQsIEluYy4xOzA5BgNVBAMTMkRpZ2lDZXJ0IFRydXN0ZWQgRzQgUlNBNDA5NiBT
-# SEEyNTYgVGltZVN0YW1waW5nIENBMB4XDTI0MDkyNjAwMDAwMFoXDTM1MTEyNTIz
-# NTk1OVowQjELMAkGA1UEBhMCVVMxETAPBgNVBAoTCERpZ2lDZXJ0MSAwHgYDVQQD
-# ExdEaWdpQ2VydCBUaW1lc3RhbXAgMjAyNDCCAiIwDQYJKoZIhvcNAQEBBQADggIP
-# ADCCAgoCggIBAL5qc5/2lSGrljC6W23mWaO16P2RHxjEiDtqmeOlwf0KMCBDEr4I
-# xHRGd7+L660x5XltSVhhK64zi9CeC9B6lUdXM0s71EOcRe8+CEJp+3R2O8oo76EO
-# 7o5tLuslxdr9Qq82aKcpA9O//X6QE+AcaU/byaCagLD/GLoUb35SfWHh43rOH3bp
-# LEx7pZ7avVnpUVmPvkxT8c2a2yC0WMp8hMu60tZR0ChaV76Nhnj37DEYTX9ReNZ8
-# hIOYe4jl7/r419CvEYVIrH6sN00yx49boUuumF9i2T8UuKGn9966fR5X6kgXj3o5
-# WHhHVO+NBikDO0mlUh902wS/Eeh8F/UFaRp1z5SnROHwSJ+QQRZ1fisD8UTVDSup
-# WJNstVkiqLq+ISTdEjJKGjVfIcsgA4l9cbk8Smlzddh4EfvFrpVNnes4c16Jidj5
-# XiPVdsn5n10jxmGpxoMc6iPkoaDhi6JjHd5ibfdp5uzIXp4P0wXkgNs+CO/CacBq
-# U0R4k+8h6gYldp4FCMgrXdKWfM4N0u25OEAuEa3JyidxW48jwBqIJqImd93NRxvd
-# 1aepSeNeREXAu2xUDEW8aqzFQDYmr9ZONuc2MhTMizchNULpUEoA6Vva7b1XCB+1
-# rxvbKmLqfY/M/SdV6mwWTyeVy5Z/JkvMFpnQy5wR14GJcv6dQ4aEKOX5AgMBAAGj
-# ggGLMIIBhzAOBgNVHQ8BAf8EBAMCB4AwDAYDVR0TAQH/BAIwADAWBgNVHSUBAf8E
-# DDAKBggrBgEFBQcDCDAgBgNVHSAEGTAXMAgGBmeBDAEEAjALBglghkgBhv1sBwEw
-# HwYDVR0jBBgwFoAUuhbZbU2FL3MpdpovdYxqII+eyG8wHQYDVR0OBBYEFJ9XLAN3
-# DigVkGalY17uT5IfdqBbMFoGA1UdHwRTMFEwT6BNoEuGSWh0dHA6Ly9jcmwzLmRp
-# Z2ljZXJ0LmNvbS9EaWdpQ2VydFRydXN0ZWRHNFJTQTQwOTZTSEEyNTZUaW1lU3Rh
-# bXBpbmdDQS5jcmwwgZAGCCsGAQUFBwEBBIGDMIGAMCQGCCsGAQUFBzABhhhodHRw
-# Oi8vb2NzcC5kaWdpY2VydC5jb20wWAYIKwYBBQUHMAKGTGh0dHA6Ly9jYWNlcnRz
-# LmRpZ2ljZXJ0LmNvbS9EaWdpQ2VydFRydXN0ZWRHNFJTQTQwOTZTSEEyNTZUaW1l
-# U3RhbXBpbmdDQS5jcnQwDQYJKoZIhvcNAQELBQADggIBAD2tHh92mVvjOIQSR9lD
-# kfYR25tOCB3RKE/P09x7gUsmXqt40ouRl3lj+8QioVYq3igpwrPvBmZdrlWBb0Hv
-# qT00nFSXgmUrDKNSQqGTdpjHsPy+LaalTW0qVjvUBhcHzBMutB6HzeledbDCzFzU
-# y34VarPnvIWrqVogK0qM8gJhh/+qDEAIdO/KkYesLyTVOoJ4eTq7gj9UFAL1UruJ
-# KlTnCVaM2UeUUW/8z3fvjxhN6hdT98Vr2FYlCS7Mbb4Hv5swO+aAXxWUm3WpByXt
-# gVQxiBlTVYzqfLDbe9PpBKDBfk+rabTFDZXoUke7zPgtd7/fvWTlCs30VAGEsshJ
-# mLbJ6ZbQ/xll/HjO9JbNVekBv2Tgem+mLptR7yIrpaidRJXrI+UzB6vAlk/8a1u7
-# cIqV0yef4uaZFORNekUgQHTqddmsPCEIYQP7xGxZBIhdmm4bhYsVA6G2WgNFYagL
-# DBzpmk9104WQzYuVNsxyoVLObhx3RugaEGru+SojW4dHPoWrUhftNpFC5H7QEY7M
-# hKRyrBe7ucykW7eaCuWBsBb4HOKRFVDcrZgdwaSIqMDiCLg4D+TPVgKx2EgEdeoH
-# NHT9l3ZDBD+XgbF+23/zBjeCtxz+dL/9NWR6P2eZRi7zcEO1xwcdcqJsyz/JceEN
-# c2Sg8h3KeFUCS7tpFk7CrDqkMIIGrjCCBJagAwIBAgIQBzY3tyRUfNhHrP0oZipe
-# WzANBgkqhkiG9w0BAQsFADBiMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNl
-# cnQgSW5jMRkwFwYDVQQLExB3d3cuZGlnaWNlcnQuY29tMSEwHwYDVQQDExhEaWdp
-# Q2VydCBUcnVzdGVkIFJvb3QgRzQwHhcNMjIwMzIzMDAwMDAwWhcNMzcwMzIyMjM1
-# OTU5WjBjMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4xOzA5
-# BgNVBAMTMkRpZ2lDZXJ0IFRydXN0ZWQgRzQgUlNBNDA5NiBTSEEyNTYgVGltZVN0
-# YW1waW5nIENBMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAxoY1Bkmz
-# wT1ySVFVxyUDxPKRN6mXUaHW0oPRnkyibaCwzIP5WvYRoUQVQl+kiPNo+n3znIkL
-# f50fng8zH1ATCyZzlm34V6gCff1DtITaEfFzsbPuK4CEiiIY3+vaPcQXf6sZKz5C
-# 3GeO6lE98NZW1OcoLevTsbV15x8GZY2UKdPZ7Gnf2ZCHRgB720RBidx8ald68Dd5
-# n12sy+iEZLRS8nZH92GDGd1ftFQLIWhuNyG7QKxfst5Kfc71ORJn7w6lY2zkpsUd
-# zTYNXNXmG6jBZHRAp8ByxbpOH7G1WE15/tePc5OsLDnipUjW8LAxE6lXKZYnLvWH
-# po9OdhVVJnCYJn+gGkcgQ+NDY4B7dW4nJZCYOjgRs/b2nuY7W+yB3iIU2YIqx5K/
-# oN7jPqJz+ucfWmyU8lKVEStYdEAoq3NDzt9KoRxrOMUp88qqlnNCaJ+2RrOdOqPV
-# A+C/8KI8ykLcGEh/FDTP0kyr75s9/g64ZCr6dSgkQe1CvwWcZklSUPRR8zZJTYsg
-# 0ixXNXkrqPNFYLwjjVj33GHek/45wPmyMKVM1+mYSlg+0wOI/rOP015LdhJRk8mM
-# DDtbiiKowSYI+RQQEgN9XyO7ZONj4KbhPvbCdLI/Hgl27KtdRnXiYKNYCQEoAA6E
-# VO7O6V3IXjASvUaetdN2udIOa5kM0jO0zbECAwEAAaOCAV0wggFZMBIGA1UdEwEB
-# /wQIMAYBAf8CAQAwHQYDVR0OBBYEFLoW2W1NhS9zKXaaL3WMaiCPnshvMB8GA1Ud
-# IwQYMBaAFOzX44LScV1kTN8uZz/nupiuHA9PMA4GA1UdDwEB/wQEAwIBhjATBgNV
-# HSUEDDAKBggrBgEFBQcDCDB3BggrBgEFBQcBAQRrMGkwJAYIKwYBBQUHMAGGGGh0
-# dHA6Ly9vY3NwLmRpZ2ljZXJ0LmNvbTBBBggrBgEFBQcwAoY1aHR0cDovL2NhY2Vy
-# dHMuZGlnaWNlcnQuY29tL0RpZ2lDZXJ0VHJ1c3RlZFJvb3RHNC5jcnQwQwYDVR0f
-# BDwwOjA4oDagNIYyaHR0cDovL2NybDMuZGlnaWNlcnQuY29tL0RpZ2lDZXJ0VHJ1
-# c3RlZFJvb3RHNC5jcmwwIAYDVR0gBBkwFzAIBgZngQwBBAIwCwYJYIZIAYb9bAcB
-# MA0GCSqGSIb3DQEBCwUAA4ICAQB9WY7Ak7ZvmKlEIgF+ZtbYIULhsBguEE0TzzBT
-# zr8Y+8dQXeJLKftwig2qKWn8acHPHQfpPmDI2AvlXFvXbYf6hCAlNDFnzbYSlm/E
-# UExiHQwIgqgWvalWzxVzjQEiJc6VaT9Hd/tydBTX/6tPiix6q4XNQ1/tYLaqT5Fm
-# niye4Iqs5f2MvGQmh2ySvZ180HAKfO+ovHVPulr3qRCyXen/KFSJ8NWKcXZl2szw
-# cqMj+sAngkSumScbqyQeJsG33irr9p6xeZmBo1aGqwpFyd/EjaDnmPv7pp1yr8TH
-# wcFqcdnGE4AJxLafzYeHJLtPo0m5d2aR8XKc6UsCUqc3fpNTrDsdCEkPlM05et3/
-# JWOZJyw9P2un8WbDQc1PtkCbISFA0LcTJM3cHXg65J6t5TRxktcma+Q4c6umAU+9
-# Pzt4rUyt+8SVe+0KXzM5h0F4ejjpnOHdI/0dKNPH+ejxmF/7K9h+8kaddSweJywm
-# 228Vex4Ziza4k9Tm8heZWcpw8De/mADfIBZPJ/tgZxahZrrdVcA6KYawmKAr7ZVB
-# tzrVFZgxtGIJDwq9gdkT/r+k0fNX2bwE+oLeMt8EifAAzV3C+dAjfwAL5HYCJtnw
-# ZXZCpimHCUcr5n8apIUP/JiW9lVUKx+A+sDyDivl1vupL0QVSucTDh3bNzgaoSv2
-# 7dZ8/DCCBY0wggR1oAMCAQICEA6bGI750C3n79tQ4ghAGFowDQYJKoZIhvcNAQEM
-# BQAwZTELMAkGA1UEBhMCVVMxFTATBgNVBAoTDERpZ2lDZXJ0IEluYzEZMBcGA1UE
-# CxMQd3d3LmRpZ2ljZXJ0LmNvbTEkMCIGA1UEAxMbRGlnaUNlcnQgQXNzdXJlZCBJ
-# RCBSb290IENBMB4XDTIyMDgwMTAwMDAwMFoXDTMxMTEwOTIzNTk1OVowYjELMAkG
-# A1UEBhMCVVMxFTATBgNVBAoTDERpZ2lDZXJ0IEluYzEZMBcGA1UECxMQd3d3LmRp
-# Z2ljZXJ0LmNvbTEhMB8GA1UEAxMYRGlnaUNlcnQgVHJ1c3RlZCBSb290IEc0MIIC
-# IjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAv+aQc2jeu+RdSjwwIjBpM+zC
-# pyUuySE98orYWcLhKac9WKt2ms2uexuEDcQwH/MbpDgW61bGl20dq7J58soR0uRf
-# 1gU8Ug9SH8aeFaV+vp+pVxZZVXKvaJNwwrK6dZlqczKU0RBEEC7fgvMHhOZ0O21x
-# 4i0MG+4g1ckgHWMpLc7sXk7Ik/ghYZs06wXGXuxbGrzryc/NrDRAX7F6Zu53yEio
-# ZldXn1RYjgwrt0+nMNlW7sp7XeOtyU9e5TXnMcvak17cjo+A2raRmECQecN4x7ax
-# xLVqGDgDEI3Y1DekLgV9iPWCPhCRcKtVgkEy19sEcypukQF8IUzUvK4bA3VdeGbZ
-# OjFEmjNAvwjXWkmkwuapoGfdpCe8oU85tRFYF/ckXEaPZPfBaYh2mHY9WV1CdoeJ
-# l2l6SPDgohIbZpp0yt5LHucOY67m1O+SkjqePdwA5EUlibaaRBkrfsCUtNJhbesz
-# 2cXfSwQAzH0clcOP9yGyshG3u3/y1YxwLEFgqrFjGESVGnZifvaAsPvoZKYz0YkH
-# 4b235kOkGLimdwHhD5QMIR2yVCkliWzlDlJRR3S+Jqy2QXXeeqxfjT/JvNNBERJb
-# 5RBQ6zHFynIWIgnffEx1P2PsIV/EIFFrb7GrhotPwtZFX50g/KEexcCPorF+CiaZ
-# 9eRpL5gdLfXZqbId5RsCAwEAAaOCATowggE2MA8GA1UdEwEB/wQFMAMBAf8wHQYD
-# VR0OBBYEFOzX44LScV1kTN8uZz/nupiuHA9PMB8GA1UdIwQYMBaAFEXroq/0ksuC
-# MS1Ri6enIZ3zbcgPMA4GA1UdDwEB/wQEAwIBhjB5BggrBgEFBQcBAQRtMGswJAYI
-# KwYBBQUHMAGGGGh0dHA6Ly9vY3NwLmRpZ2ljZXJ0LmNvbTBDBggrBgEFBQcwAoY3
-# aHR0cDovL2NhY2VydHMuZGlnaWNlcnQuY29tL0RpZ2lDZXJ0QXNzdXJlZElEUm9v
-# dENBLmNydDBFBgNVHR8EPjA8MDqgOKA2hjRodHRwOi8vY3JsMy5kaWdpY2VydC5j
-# b20vRGlnaUNlcnRBc3N1cmVkSURSb290Q0EuY3JsMBEGA1UdIAQKMAgwBgYEVR0g
-# ADANBgkqhkiG9w0BAQwFAAOCAQEAcKC/Q1xV5zhfoKN0Gz22Ftf3v1cHvZqsoYcs
-# 7IVeqRq7IviHGmlUIu2kiHdtvRoU9BNKei8ttzjv9P+Aufih9/Jy3iS8UgPITtAq
-# 3votVs/59PesMHqai7Je1M/RQ0SbQyHrlnKhSLSZy51PpwYDE3cnRNTnf+hZqPC/
-# Lwum6fI0POz3A8eHqNJMQBk1RmppVLC4oVaO7KTVPeix3P0c2PR3WlxUjG/voVA9
-# /HYJaISfb8rbII01YBwCA8sgsKxYoA5AY8WYIsGyWfVVa88nq2x2zm8jLfR+cWoj
-# ayL/ErhULSd+2DrZ8LaHlv1b0VysGMNNn3O3AamfV6peKOK5lDGCA3YwggNyAgEB
-# MHcwYzELMAkGA1UEBhMCVVMxFzAVBgNVBAoTDkRpZ2lDZXJ0LCBJbmMuMTswOQYD
-# VQQDEzJEaWdpQ2VydCBUcnVzdGVkIEc0IFJTQTQwOTYgU0hBMjU2IFRpbWVTdGFt
-# cGluZyBDQQIQC65mvFq6f5WHxvnpBOMzBDANBglghkgBZQMEAgEFAKCB0TAaBgkq
-# hkiG9w0BCQMxDQYLKoZIhvcNAQkQAQQwHAYJKoZIhvcNAQkFMQ8XDTI0MTExNTEz
-# MTMzNFowKwYLKoZIhvcNAQkQAgwxHDAaMBgwFgQU29OF7mLb0j575PZxSFCHJNWG
-# W0UwLwYJKoZIhvcNAQkEMSIEIEp8wJYcdX+4C6pMRGe+IgumC+P6yUHm121Xwwtw
-# HUdsMDcGCyqGSIb3DQEJEAIvMSgwJjAkMCIEIHZ2n6jyYy8fQws6IzCu1lZ1/tdz
-# 2wXWZbkFk5hDj5rbMA0GCSqGSIb3DQEBAQUABIICAJXIKpaFGYjeGkGRhLpj3rKG
-# cKF9OLC/AQ5ybsAvMeTQuGotmpyKH5VVv7xHrPuwNb2UlCof7wqhGWN3MCB8Om3X
-# 5qRc2H8JOUbawtI8qLQX8b3cLVwvnTiH8uxv5Fd8uNiPzv+obqG1PoQp2bmHy5AE
-# 6c7z9v4sSlaLfdr2XPK60z+KU9LgGIHnNVP07v1cg/QFqdiPD5U4kevr+bQXZjeX
-# O+PR8GKDzNbH3i8qDbJ+MQ9rvlEiBNMlI2v2BbwlZj4Ajz8O3k3HSIMv9ReiyVC2
-# mOcOlWzIr6p2fRVvd7O0Xa0ArCj5+/Q2zdNQC/9/ZbDje/ZEJvIv5pVAf9QaPvi2
-# yt/PePYJ7fmJ5itd/OszLhTJjplbTXdMkSTkAD4VGBKZRucHL8mGUjbQ4AVoJzeV
-# Z9gqwY3bCbN/J6LnMANu16T/RyoVYOnL5P+EmIl20J7nyqZoCzdfP19DVnSjia65
-# 48WGxVvYsgiurqfyVjXBH1gVpIml7mkfDo0NXFeID02JN7tCzUPMgmIpfxH+ZvgQ
-# aO+kPFPJ0oKQCQRtnyPagneYbrZbedDezKKNMqyPuK1Rnxbil5PEBHEWnh/ghPfS
-# eHtry/VSE1phH/254RZ/ionM+eI0XXtttS/ujKaDWwhzrN3Bj4AjiWqEi+PbG4+j
-# tvxNDpiIMwpWtzF0tT1E
+# MAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIJOGS5HWMc2rDXvPKvX2nFz6
+# Kgz3N3nMaspPXtcMKTojMA0GCSqGSIb3DQEBAQUABIICAJ74B4pGm7vaEYuhs3NT
+# DVwFMiBWnu7mul6K6Van7Itz0bECfra3r9wpUvcsAoOKEqZ9VX1AmJ/zoIQhQgq3
+# gPMhbPLeJuIwnjExCLHSwaJ9tXbETIMX50vMBOt6aLsVgnzT2VJTC5UTzvwcW/Lm
+# Gaucxnm1bFMNmTMdeOZFLPZBB+WPaJ3dT2lgNU/usB0DyF+i5ilFPFUzesrMDzcV
+# x+ijkEOz1jxNxXGbTotPvXjMPkUnBIaYsTmeKhrzn085p8O5l0eUAqjEnYPvAq/n
+# WSvpohmXZa3V7pWRum5XPZ2fe4cs6GjMYmdmD+8ovW4G6KVbNkf75JFKJZ82Y9lq
+# qn4VO0r5vV4ffD0erFF/KGTavhvz/VlG2par1O/jfa6ue9yPaLLpWiynThz9/lGI
+# zbvmAGJuIxCjRcA/Dp/QRkl1a8+VvXtaopd3hQTwgHhlXhnOLKzDKuLoJd9CsDPL
+# 0krYSqps1PD7sAdpr4rx4Gkv+iT9vLJYD+N9KSpfW8BmrHKaKp2BnK79ERxo4fQm
+# bagOlVCX/FBmSYU+HW52fb2b9fwS7xVupOoruHiIksjTy7YWNgck3CW4WVKxp35y
+# i6SEO4u+1ivx9uhIYQnDJ4mEcezLU1QBFoc5UG6IW1QgbnYVbBwhlrp/poF90NHp
+# TC2UDXb1m+JfMPdjaOBZdothoYIXOjCCFzYGCisGAQQBgjcDAwExghcmMIIXIgYJ
+# KoZIhvcNAQcCoIIXEzCCFw8CAQMxDzANBglghkgBZQMEAgEFADB4BgsqhkiG9w0B
+# CRABBKBpBGcwZQIBAQYJYIZIAYb9bAcBMDEwDQYJYIZIAWUDBAIBBQAEIBw/qIiW
+# ZirjZAJAqvzJLoq2PiAMMR2U/b8N3B7swhynAhEArbB7KWdDox91SH7wp5yr5hgP
+# MjAyNDExMTgwMTQzNDFaoIITAzCCBrwwggSkoAMCAQICEAuuZrxaun+Vh8b56QTj
+# MwQwDQYJKoZIhvcNAQELBQAwYzELMAkGA1UEBhMCVVMxFzAVBgNVBAoTDkRpZ2lD
+# ZXJ0LCBJbmMuMTswOQYDVQQDEzJEaWdpQ2VydCBUcnVzdGVkIEc0IFJTQTQwOTYg
+# U0hBMjU2IFRpbWVTdGFtcGluZyBDQTAeFw0yNDA5MjYwMDAwMDBaFw0zNTExMjUy
+# MzU5NTlaMEIxCzAJBgNVBAYTAlVTMREwDwYDVQQKEwhEaWdpQ2VydDEgMB4GA1UE
+# AxMXRGlnaUNlcnQgVGltZXN0YW1wIDIwMjQwggIiMA0GCSqGSIb3DQEBAQUAA4IC
+# DwAwggIKAoICAQC+anOf9pUhq5Ywultt5lmjtej9kR8YxIg7apnjpcH9CjAgQxK+
+# CMR0Rne/i+utMeV5bUlYYSuuM4vQngvQepVHVzNLO9RDnEXvPghCaft0djvKKO+h
+# Du6ObS7rJcXa/UKvNminKQPTv/1+kBPgHGlP28mgmoCw/xi6FG9+Un1h4eN6zh92
+# 6SxMe6We2r1Z6VFZj75MU/HNmtsgtFjKfITLutLWUdAoWle+jYZ49+wxGE1/UXjW
+# fISDmHuI5e/6+NfQrxGFSKx+rDdNMsePW6FLrphfYtk/FLihp/feun0eV+pIF496
+# OVh4R1TvjQYpAztJpVIfdNsEvxHofBf1BWkadc+Up0Th8EifkEEWdX4rA/FE1Q0r
+# qViTbLVZIqi6viEk3RIySho1XyHLIAOJfXG5PEppc3XYeBH7xa6VTZ3rOHNeiYnY
+# +V4j1XbJ+Z9dI8ZhqcaDHOoj5KGg4YuiYx3eYm33aebsyF6eD9MF5IDbPgjvwmnA
+# alNEeJPvIeoGJXaeBQjIK13SlnzODdLtuThALhGtyconcVuPI8AaiCaiJnfdzUcb
+# 3dWnqUnjXkRFwLtsVAxFvGqsxUA2Jq/WTjbnNjIUzIs3ITVC6VBKAOlb2u29Vwgf
+# ta8b2ypi6n2PzP0nVepsFk8nlcuWfyZLzBaZ0MucEdeBiXL+nUOGhCjl+QIDAQAB
+# o4IBizCCAYcwDgYDVR0PAQH/BAQDAgeAMAwGA1UdEwEB/wQCMAAwFgYDVR0lAQH/
+# BAwwCgYIKwYBBQUHAwgwIAYDVR0gBBkwFzAIBgZngQwBBAIwCwYJYIZIAYb9bAcB
+# MB8GA1UdIwQYMBaAFLoW2W1NhS9zKXaaL3WMaiCPnshvMB0GA1UdDgQWBBSfVywD
+# dw4oFZBmpWNe7k+SH3agWzBaBgNVHR8EUzBRME+gTaBLhklodHRwOi8vY3JsMy5k
+# aWdpY2VydC5jb20vRGlnaUNlcnRUcnVzdGVkRzRSU0E0MDk2U0hBMjU2VGltZVN0
+# YW1waW5nQ0EuY3JsMIGQBggrBgEFBQcBAQSBgzCBgDAkBggrBgEFBQcwAYYYaHR0
+# cDovL29jc3AuZGlnaWNlcnQuY29tMFgGCCsGAQUFBzAChkxodHRwOi8vY2FjZXJ0
+# cy5kaWdpY2VydC5jb20vRGlnaUNlcnRUcnVzdGVkRzRSU0E0MDk2U0hBMjU2VGlt
+# ZVN0YW1waW5nQ0EuY3J0MA0GCSqGSIb3DQEBCwUAA4ICAQA9rR4fdplb4ziEEkfZ
+# Q5H2EdubTggd0ShPz9Pce4FLJl6reNKLkZd5Y/vEIqFWKt4oKcKz7wZmXa5VgW9B
+# 76k9NJxUl4JlKwyjUkKhk3aYx7D8vi2mpU1tKlY71AYXB8wTLrQeh83pXnWwwsxc
+# 1Mt+FWqz57yFq6laICtKjPICYYf/qgxACHTvypGHrC8k1TqCeHk6u4I/VBQC9VK7
+# iSpU5wlWjNlHlFFv/M93748YTeoXU/fFa9hWJQkuzG2+B7+bMDvmgF8VlJt1qQcl
+# 7YFUMYgZU1WM6nyw23vT6QSgwX5Pq2m0xQ2V6FJHu8z4LXe/371k5QrN9FQBhLLI
+# SZi2yemW0P8ZZfx4zvSWzVXpAb9k4Hpvpi6bUe8iK6WonUSV6yPlMwerwJZP/Gtb
+# u3CKldMnn+LmmRTkTXpFIEB06nXZrDwhCGED+8RsWQSIXZpuG4WLFQOhtloDRWGo
+# Cwwc6ZpPddOFkM2LlTbMcqFSzm4cd0boGhBq7vkqI1uHRz6Fq1IX7TaRQuR+0BGO
+# zISkcqwXu7nMpFu3mgrlgbAW+BzikRVQ3K2YHcGkiKjA4gi4OA/kz1YCsdhIBHXq
+# BzR0/Zd2QwQ/l4Gxftt/8wY3grcc/nS//TVkej9nmUYu83BDtccHHXKibMs/yXHh
+# DXNkoPIdynhVAku7aRZOwqw6pDCCBq4wggSWoAMCAQICEAc2N7ckVHzYR6z9KGYq
+# XlswDQYJKoZIhvcNAQELBQAwYjELMAkGA1UEBhMCVVMxFTATBgNVBAoTDERpZ2lD
+# ZXJ0IEluYzEZMBcGA1UECxMQd3d3LmRpZ2ljZXJ0LmNvbTEhMB8GA1UEAxMYRGln
+# aUNlcnQgVHJ1c3RlZCBSb290IEc0MB4XDTIyMDMyMzAwMDAwMFoXDTM3MDMyMjIz
+# NTk1OVowYzELMAkGA1UEBhMCVVMxFzAVBgNVBAoTDkRpZ2lDZXJ0LCBJbmMuMTsw
+# OQYDVQQDEzJEaWdpQ2VydCBUcnVzdGVkIEc0IFJTQTQwOTYgU0hBMjU2IFRpbWVT
+# dGFtcGluZyBDQTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAMaGNQZJ
+# s8E9cklRVcclA8TykTepl1Gh1tKD0Z5Mom2gsMyD+Vr2EaFEFUJfpIjzaPp985yJ
+# C3+dH54PMx9QEwsmc5Zt+FeoAn39Q7SE2hHxc7Gz7iuAhIoiGN/r2j3EF3+rGSs+
+# QtxnjupRPfDWVtTnKC3r07G1decfBmWNlCnT2exp39mQh0YAe9tEQYncfGpXevA3
+# eZ9drMvohGS0UvJ2R/dhgxndX7RUCyFobjchu0CsX7LeSn3O9TkSZ+8OpWNs5KbF
+# Hc02DVzV5huowWR0QKfAcsW6Th+xtVhNef7Xj3OTrCw54qVI1vCwMROpVymWJy71
+# h6aPTnYVVSZwmCZ/oBpHIEPjQ2OAe3VuJyWQmDo4EbP29p7mO1vsgd4iFNmCKseS
+# v6De4z6ic/rnH1pslPJSlRErWHRAKKtzQ87fSqEcazjFKfPKqpZzQmiftkaznTqj
+# 1QPgv/CiPMpC3BhIfxQ0z9JMq++bPf4OuGQq+nUoJEHtQr8FnGZJUlD0UfM2SU2L
+# INIsVzV5K6jzRWC8I41Y99xh3pP+OcD5sjClTNfpmEpYPtMDiP6zj9NeS3YSUZPJ
+# jAw7W4oiqMEmCPkUEBIDfV8ju2TjY+Cm4T72wnSyPx4JduyrXUZ14mCjWAkBKAAO
+# hFTuzuldyF4wEr1GnrXTdrnSDmuZDNIztM2xAgMBAAGjggFdMIIBWTASBgNVHRMB
+# Af8ECDAGAQH/AgEAMB0GA1UdDgQWBBS6FtltTYUvcyl2mi91jGogj57IbzAfBgNV
+# HSMEGDAWgBTs1+OC0nFdZEzfLmc/57qYrhwPTzAOBgNVHQ8BAf8EBAMCAYYwEwYD
+# VR0lBAwwCgYIKwYBBQUHAwgwdwYIKwYBBQUHAQEEazBpMCQGCCsGAQUFBzABhhho
+# dHRwOi8vb2NzcC5kaWdpY2VydC5jb20wQQYIKwYBBQUHMAKGNWh0dHA6Ly9jYWNl
+# cnRzLmRpZ2ljZXJ0LmNvbS9EaWdpQ2VydFRydXN0ZWRSb290RzQuY3J0MEMGA1Ud
+# HwQ8MDowOKA2oDSGMmh0dHA6Ly9jcmwzLmRpZ2ljZXJ0LmNvbS9EaWdpQ2VydFRy
+# dXN0ZWRSb290RzQuY3JsMCAGA1UdIAQZMBcwCAYGZ4EMAQQCMAsGCWCGSAGG/WwH
+# ATANBgkqhkiG9w0BAQsFAAOCAgEAfVmOwJO2b5ipRCIBfmbW2CFC4bAYLhBNE88w
+# U86/GPvHUF3iSyn7cIoNqilp/GnBzx0H6T5gyNgL5Vxb122H+oQgJTQxZ822EpZv
+# xFBMYh0MCIKoFr2pVs8Vc40BIiXOlWk/R3f7cnQU1/+rT4osequFzUNf7WC2qk+R
+# Zp4snuCKrOX9jLxkJodskr2dfNBwCnzvqLx1T7pa96kQsl3p/yhUifDVinF2ZdrM
+# 8HKjI/rAJ4JErpknG6skHibBt94q6/aesXmZgaNWhqsKRcnfxI2g55j7+6adcq/E
+# x8HBanHZxhOACcS2n82HhyS7T6NJuXdmkfFynOlLAlKnN36TU6w7HQhJD5TNOXrd
+# /yVjmScsPT9rp/Fmw0HNT7ZAmyEhQNC3EyTN3B14OuSereU0cZLXJmvkOHOrpgFP
+# vT87eK1MrfvElXvtCl8zOYdBeHo46Zzh3SP9HSjTx/no8Zhf+yvYfvJGnXUsHics
+# JttvFXseGYs2uJPU5vIXmVnKcPA3v5gA3yAWTyf7YGcWoWa63VXAOimGsJigK+2V
+# Qbc61RWYMbRiCQ8KvYHZE/6/pNHzV9m8BPqC3jLfBInwAM1dwvnQI38AC+R2AibZ
+# 8GV2QqYphwlHK+Z/GqSFD/yYlvZVVCsfgPrA8g4r5db7qS9EFUrnEw4d2zc4GqEr
+# 9u3WfPwwggWNMIIEdaADAgECAhAOmxiO+dAt5+/bUOIIQBhaMA0GCSqGSIb3DQEB
+# DAUAMGUxCzAJBgNVBAYTAlVTMRUwEwYDVQQKEwxEaWdpQ2VydCBJbmMxGTAXBgNV
+# BAsTEHd3dy5kaWdpY2VydC5jb20xJDAiBgNVBAMTG0RpZ2lDZXJ0IEFzc3VyZWQg
+# SUQgUm9vdCBDQTAeFw0yMjA4MDEwMDAwMDBaFw0zMTExMDkyMzU5NTlaMGIxCzAJ
+# BgNVBAYTAlVTMRUwEwYDVQQKEwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5k
+# aWdpY2VydC5jb20xITAfBgNVBAMTGERpZ2lDZXJ0IFRydXN0ZWQgUm9vdCBHNDCC
+# AiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAL/mkHNo3rvkXUo8MCIwaTPs
+# wqclLskhPfKK2FnC4SmnPVirdprNrnsbhA3EMB/zG6Q4FutWxpdtHauyefLKEdLk
+# X9YFPFIPUh/GnhWlfr6fqVcWWVVyr2iTcMKyunWZanMylNEQRBAu34LzB4TmdDtt
+# ceItDBvuINXJIB1jKS3O7F5OyJP4IWGbNOsFxl7sWxq868nPzaw0QF+xembud8hI
+# qGZXV59UWI4MK7dPpzDZVu7Ke13jrclPXuU15zHL2pNe3I6PgNq2kZhAkHnDeMe2
+# scS1ahg4AxCN2NQ3pC4FfYj1gj4QkXCrVYJBMtfbBHMqbpEBfCFM1LyuGwN1XXhm
+# 2ToxRJozQL8I11pJpMLmqaBn3aQnvKFPObURWBf3JFxGj2T3wWmIdph2PVldQnaH
+# iZdpekjw4KISG2aadMreSx7nDmOu5tTvkpI6nj3cAORFJYm2mkQZK37AlLTSYW3r
+# M9nF30sEAMx9HJXDj/chsrIRt7t/8tWMcCxBYKqxYxhElRp2Yn72gLD76GSmM9GJ
+# B+G9t+ZDpBi4pncB4Q+UDCEdslQpJYls5Q5SUUd0viastkF13nqsX40/ybzTQRES
+# W+UQUOsxxcpyFiIJ33xMdT9j7CFfxCBRa2+xq4aLT8LWRV+dIPyhHsXAj6Kxfgom
+# mfXkaS+YHS312amyHeUbAgMBAAGjggE6MIIBNjAPBgNVHRMBAf8EBTADAQH/MB0G
+# A1UdDgQWBBTs1+OC0nFdZEzfLmc/57qYrhwPTzAfBgNVHSMEGDAWgBRF66Kv9JLL
+# gjEtUYunpyGd823IDzAOBgNVHQ8BAf8EBAMCAYYweQYIKwYBBQUHAQEEbTBrMCQG
+# CCsGAQUFBzABhhhodHRwOi8vb2NzcC5kaWdpY2VydC5jb20wQwYIKwYBBQUHMAKG
+# N2h0dHA6Ly9jYWNlcnRzLmRpZ2ljZXJ0LmNvbS9EaWdpQ2VydEFzc3VyZWRJRFJv
+# b3RDQS5jcnQwRQYDVR0fBD4wPDA6oDigNoY0aHR0cDovL2NybDMuZGlnaWNlcnQu
+# Y29tL0RpZ2lDZXJ0QXNzdXJlZElEUm9vdENBLmNybDARBgNVHSAECjAIMAYGBFUd
+# IAAwDQYJKoZIhvcNAQEMBQADggEBAHCgv0NcVec4X6CjdBs9thbX979XB72arKGH
+# LOyFXqkauyL4hxppVCLtpIh3bb0aFPQTSnovLbc47/T/gLn4offyct4kvFIDyE7Q
+# Kt76LVbP+fT3rDB6mouyXtTP0UNEm0Mh65ZyoUi0mcudT6cGAxN3J0TU53/oWajw
+# vy8LpunyNDzs9wPHh6jSTEAZNUZqaVSwuKFWjuyk1T3osdz9HNj0d1pcVIxv76FQ
+# Pfx2CWiEn2/K2yCNNWAcAgPLILCsWKAOQGPFmCLBsln1VWvPJ6tsds5vIy30fnFq
+# I2si/xK4VC0nftg62fC2h5b9W9FcrBjDTZ9ztwGpn1eqXijiuZQxggN2MIIDcgIB
+# ATB3MGMxCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5jLjE7MDkG
+# A1UEAxMyRGlnaUNlcnQgVHJ1c3RlZCBHNCBSU0E0MDk2IFNIQTI1NiBUaW1lU3Rh
+# bXBpbmcgQ0ECEAuuZrxaun+Vh8b56QTjMwQwDQYJYIZIAWUDBAIBBQCggdEwGgYJ
+# KoZIhvcNAQkDMQ0GCyqGSIb3DQEJEAEEMBwGCSqGSIb3DQEJBTEPFw0yNDExMTgw
+# MTQzNDFaMCsGCyqGSIb3DQEJEAIMMRwwGjAYMBYEFNvThe5i29I+e+T2cUhQhyTV
+# hltFMC8GCSqGSIb3DQEJBDEiBCCLPWAm+aNyc4DrqvDwqzC7ow3BipFMugVd26EO
+# cUUgxTA3BgsqhkiG9w0BCRACLzEoMCYwJDAiBCB2dp+o8mMvH0MLOiMwrtZWdf7X
+# c9sF1mW5BZOYQ4+a2zANBgkqhkiG9w0BAQEFAASCAgA1D9F+ChwLLlPfrnjVN7y8
+# Raa08Q1yJoUiIPZw/m4rknXNCjyL768gux2rys7Y0ofhaTL8qB2U5605DNmkuDAw
+# NwDXME2bka4xBxDJrI43XFVtu3SpKRbNcv5ujZs0jF4gA3GQykM9UahyusmaxwtQ
+# DILavBxCuVye9HX86Z1Bdac1wCWY6hvbtoT4ffm+/Uondgh8VzEWd36ImGOpAXQM
+# +UOR8t4JG5777yIBTv51W3qnEx7e4bazezEXIgC7DdXFSq18ypjJuCkLMrb2bWgp
+# /CxGT2ff4itbsv8Z++oJI2oOewhlLiA5tVMkbB0lVGQbkeEP4nqUKwAvOt7g1i7f
+# uSxGdoNbaesSNefScqii1OTXHsLSjNciRQQJZMxJI44F15X7LOVdaaIbvgoLfIWy
+# T9s+OgUxmAvDdZKpRcHO//tW6JqFCoi+gdW04mUSvME+MRx6RFZe1cjZNPpJEnwh
+# kmKGhndTmaBjg1nJH0okrfmR87jjIhulemrdJsUZtcdzCBxT1gW5AaHFOMUuHBkR
+# P9h0VG3f12fejgEotaDyTmPYBazFlwSrXtrr1uFmS0SDw681z5xGjK92279MlUpo
+# 8RBOupy5LSPC59Oi1j7SSeW+xyBfS+0aiyKEAYfk1qO0f3Eql9kTQBZjaizDdKmq
+# ubbhLFZ/dE5qax8nkz2Rxw==
 # SIG # End signature block
