@@ -1,5 +1,5 @@
 ﻿#
-# Fido v1.61 - Feature ISO Downloader, for retail Windows images and UEFI Shell
+# Fido v1.62 - ISO Downloader, for Microsoft Windows and UEFI Shell
 # Copyright © 2019-2024 Pete Batard <pete@akeo.ie>
 # Command line support: Copyright © 2021 flx5
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
@@ -24,7 +24,7 @@
 #region Parameters
 param(
 	# (Optional) The title to display on the application window.
-	[string]$AppTitle = "Fido - Feature ISO Downloader",
+	[string]$AppTitle = "Fido - ISO Downloader",
 	# (Optional) '|' separated UI localization strings.
 	[string]$LocData,
 	# (Optional) Forced locale
@@ -346,17 +346,6 @@ function ConvertTo-ImageSource
 	}
 }
 
-function Throw-Error([object]$Req, [string]$Alt)
-{
-	$Err = $(GetElementById -Request $Req -Id "errorModalMessage").innerText -replace "<[^>]+>" -replace "\s+", " "
-	if (!$Err) {
-		$Err = $Alt
-	} else {
-		$Err = [System.Text.Encoding]::UTF8.GetString([byte[]][char[]]$Err)
-	}
-	throw $Err
-}
-
 # Translate a message string
 function Get-Translation([string]$Text)
 {
@@ -398,14 +387,14 @@ function Get-Arch
 	}
 }
 
-# Some PowerShells don't have Microsoft.mshtml assembly (comes with MS Office?)
-# so we can't use ParsedHtml or IHTMLDocument[2|3] features there...
-function GetElementById([object]$Request, [string]$Id)
+# Convert a Microsoft arch type code to a formal architecture name
+function Get-Arch-From-Type([int]$Type)
 {
-	try {
-		return $Request.ParsedHtml.IHTMLDocument3_GetElementByID($Id)
-	} catch {
-		return $Request.AllElements | ? {$_.id -eq $Id}
+	switch($Type) {
+	0 { return "x86" }
+	1 { return "x64" }
+	2 { return "ARM64" }
+	default { return "Unknown"}
 	}
 }
 
@@ -421,17 +410,6 @@ function Error([string]$ErrorMessage)
 	} else {
 		$script:ExitCode = 2
 	}
-}
-
-function Get-RandomDate()
-{
-	[DateTime]$Min = "1/1/2008"
-	[DateTime]$Max = [DateTime]::Now
-
-	$RandomGen = new-object random
-	$RandomTicks = [Convert]::ToInt64( ($Max.ticks * 1.0 - $Min.Ticks * 1.0 ) * $RandomGen.NextDouble() + $Min.Ticks * 1.0 )
-	$Date = new-object DateTime($RandomTicks)
-	return $Date.ToString("yyyyMMdd")
 }
 #endregion
 
@@ -466,15 +444,8 @@ $MaxStage = 4
 $SessionId = @($null) * 2
 $ExitCode = 100
 $Locale = $Locale
-$RequestData = @{}
-# This GUID applies to all visitors, regardless of their locale
-$RequestData["GetLangs"] = @("a8f8f489-4c7f-463a-9ca6-5cff94d8d041", "getskuinformationbyproductedition" )
-# This GUID applies to visitors of the en-US download page. Other locales may get a different GUID.
-$RequestData["GetLinks"] = @("6e2a1789-ef16-4f27-a296-74ef7ef5d96b", "GetProductDownloadLinksBySku" )
-# Create a semi-random Linux User-Agent string
-$FirefoxVersion = Get-Random -Minimum 110 -Maximum 135
-$FirefoxDate = Get-RandomDate
-$UserAgent = "Mozilla/5.0 (X11; Linux i586; rv:$FirefoxVersion.0) Gecko/$FirefoxDate Firefox/$FirefoxVersion.0"
+$OrgId = "y6jn8c31"
+$ProfileId = "606624d44113"
 $Verbosity = 1
 if ($Debug) {
 	$Verbosity = 5
@@ -527,13 +498,7 @@ function Check-Locale
 		if ($Verbosity -ge 2) {
 			Write-Host Querying $url
 		}
-		# Looks Microsoft are filtering our script according to the first query it performs with the spoofed user agent.
-		# So, to continue this pointless cat and mouse game, we simply add an extra first query with the default user agent.
-		# Also: "Hi Microsoft. You sure have A LOT OF RESOURCES TO WASTE to have assigned folks of yours to cripple scripts
-		# that merely exist because you have chosen to make the user experience from your download website utterly subpar.
-		# And while I am glad senpai noticed me (UwU), I feel compelled to ask: Don't you guys have better things to do?"
 		Invoke-WebRequest -UseBasicParsing -TimeoutSec $DefaultTimeout -MaximumRedirection 0 $url | Out-Null
-		Invoke-WebRequest -UseBasicParsing -TimeoutSec $DefaultTimeout -MaximumRedirection 0 -UserAgent $UserAgent $url | Out-Null
 	} catch {
 		# Of course PowerShell 7 had to BREAK $_.Exception.Status on timeouts...
 		if ($_.Exception.Status -eq "Timeout" -or $_.Exception.GetType().Name -eq "TaskCanceledException") {
@@ -541,6 +506,28 @@ function Check-Locale
 		}
 		$script:QueryLocale = "en-US"
 	}
+}
+
+function Get-Code-715-123130-Message
+{
+	try {
+		$url = "https://www.microsoft.com/" + $QueryLocale + "/software-download/windows11"
+		if ($Verbosity -ge 2) {
+			Write-Host Querying $url
+		}
+		$r = Invoke-WebRequest -UseBasicParsing -TimeoutSec $DefaultTimeout -MaximumRedirection 0 $url
+		# PowerShell 7 forces us to parse the HTML ourselves
+		$r = $r -replace "`n" -replace "`r"
+		$pattern = '.*<input id="msg-01" type="hidden" value="(.*?)"/>.*'
+		$msg = [regex]::Match($r, $pattern).Groups[1].Value
+		$msg = $msg -replace "&lt;", "<" -replace "<[^>]+>" -replace "\s+", " " -replace "\?\?\?", "-"
+		if ($msg -eq $null) {
+			throw
+		}
+	} catch {
+		$msg  = "You are (temporarily) banned from using this Microsoft service. Please try againg later. Refer to message code 715-123130 and"
+	}
+	return $msg
 }
 
 # Return an array of releases (e.g. 20H2, 21H1, ...) for the selected Windows version
@@ -584,55 +571,49 @@ function Get-Windows-Languages([int]$SelectedVersion, [object]$SelectedEdition)
 		foreach ($EditionId in $SelectedEdition) {
 			$SessionId[$SessionIndex] = [guid]::NewGuid()
 			# Microsoft download protection now requires the sessionId to be whitelisted through vlscppe.microsoft.com/tags
-			$url = "https://vlscppe.microsoft.com/tags?org_id=y6jn8c31&session_id=" + $SessionId[$SessionIndex]
+			$url = "https://vlscppe.microsoft.com/tags"
+			$url += "?org_id=" + $OrgId
+			$url += "&session_id=" + $SessionId[$SessionIndex]
 			if ($Verbosity -ge 2) {
 				Write-Host Querying $url
 			}
 			try {
-				Invoke-WebRequest -UseBasicParsing -TimeoutSec $DefaultTimeout -MaximumRedirection 0 -UserAgent $UserAgent $url | Out-Null
+				Invoke-WebRequest -UseBasicParsing -TimeoutSec $DefaultTimeout -MaximumRedirection 0 $url | Out-Null
 			} catch {
 				Error($_.Exception.Message)
 				return @()
 			}
-			$url = "https://www.microsoft.com/" + $QueryLocale + "/api/controls/contentinclude/html"
-			$url += "?pageId=" + $RequestData["GetLangs"][0]
-			$url += "&host=www.microsoft.com"
-			$url += "&segments=software-download," + $WindowsVersions[$SelectedVersion][0][1]
-			$url += "&query=&action=" + $RequestData["GetLangs"][1]
-			$url += "&sessionId=" + $SessionId[$SessionIndex]
+			$url = "https://www.microsoft.com/software-download-connector/api/getskuinformationbyproductedition"
+			$url += "?profile=" + $ProfileId
 			$url += "&productEditionId=" + $EditionId
-			$url += "&sdVersion=2"
+			$url += "&SKU=undefined"
+			$url += "&friendlyFileName=undefined"
+			$url += "&Locale=" + $QueryLocale
+			$url += "&sessionID=" + $SessionId[$SessionIndex]
 			if ($Verbosity -ge 2) {
 				Write-Host Querying $url
 			}
 			try {
-				$r = Invoke-WebRequest -Method Post -UseBasicParsing -TimeoutSec $DefaultTimeout -UserAgent $UserAgent -SessionVariable "Session" $url
+				$r = Invoke-RestMethod -UseBasicParsing -TimeoutSec $DefaultTimeout -SessionVariable "Session" $url
+				if ($r -eq $null) {
+					throw "Could not retrieve languages from server"
+				}
 				if ($Verbosity -ge 5) {
 					Write-Host "=============================================================================="
-					Write-Host $r
+					Write-Host ($r | ConvertTo-Json)
 					Write-Host "=============================================================================="
 				}
-				if ($r -match "errorModalMessage") {
-					Throw-Error -Req $r -Alt "Could not retrieve languages from server"
+				if ($r.Errors) {
+					throw $r.Errors[0].Value
 				}
-				$r = $r -replace "`n" -replace "`r"
-				$pattern = '.*<select id="product-languages"[^>]*>(.*)</select>.*'
-				$html = [regex]::Match($r, $pattern).Groups[1].Value
-				# Go through an XML conversion to keep all PowerShells happy...
-				$html = $html.Replace("selected value", "value")
-				$html = "<options>" + $html + "</options>"
-				$xml = [xml]$html
-				foreach ($var in $xml.options.option) {
-					$json = $var.value | ConvertFrom-Json;
-					if ($json) {
-						if (!$languages.Contains($json.language)) {
-							$languages[$json.language] = @{ DisplayName = $var.InnerText; Data = @() }
-						}
-						$languages[$json.language].Data += @{ SessionIndex = $SessionIndex; SkuId = $json.id }
+				foreach ($Sku in $r.Skus) {
+					if (!$languages.Contains($Sku.Language)) {
+						$languages[$Sku.Language] = @{ DisplayName = $Sku.LocalizedLanguage; Data = @() }
 					}
+					$languages[$Sku.Language].Data += @{ SessionIndex = $SessionIndex; SkuId = $Sku.Id }
 				}
 				if ($languages.Length -eq 0) {
-					Throw-Error -Req $r -Alt "Could not parse languages"
+					throw "Could not parse languages"
 				}
 			} catch {
 				Error($_.Exception.Message)
@@ -682,65 +663,48 @@ function Get-Windows-Download-Links([int]$SelectedVersion, [int]$SelectedRelease
 				$archs += $sep + $arch
 				$sep = ", "
 			}
-			$links += @(New-Object PsObject -Property @{ Type = $archs; Url = $link })
+			$links += @(New-Object PsObject -Property @{ Arch = $archs; Url = $link })
 		} catch {
 			Error($_.Exception.Message)
 			return @()
 		}
 	} else {
 		foreach ($Entry in $SelectedLanguage.Data) {
-			$url = "https://www.microsoft.com/" + $QueryLocale + "/api/controls/contentinclude/html"
-			$url += "?pageId=" + $RequestData["GetLinks"][0]
-			$url += "&host=www.microsoft.com"
-			$url += "&segments=software-download," + $WindowsVersions[$SelectedVersion][0][1]
-			$url += "&query=&action=" + $RequestData["GetLinks"][1]
-			$url += "&sessionId=" + $SessionId[$Entry.SessionIndex]
-			$url += "&skuId=" + $Entry.SkuId
-			$url += "&language=" + $SelectedLanguage.Name
-			$url += "&sdVersion=2"
+			$url = "https://www.microsoft.com/software-download-connector/api/GetProductDownloadLinksBySku"
+			$url += "?profile=" + $ProfileId
+			$url += "&productEditionId=undefined"
+			$url += "&SKU=" + $Entry.SkuId
+			$url += "&friendlyFileName=undefined"
+			$url += "&Locale=" + $QueryLocale
+			$url += "&sessionID=" + $SessionId[$Entry.SessionIndex]
 			if ($Verbosity -ge 2) {
 				Write-Host Querying $url
 			}
-
 			try {
-				# Must add a referer for this request, else Microsoft's servers will deny it
+				# Must add a referer for this request, else Microsoft's servers may deny it
 				$ref = "https://www.microsoft.com/software-download/windows11"
-				$r = Invoke-WebRequest -Method Post -Headers @{ "Referer" = $ref } -UseBasicParsing -TimeoutSec $DefaultTimeout -UserAgent $UserAgent -WebSession $Session $url
+				$r = Invoke-RestMethod -Headers @{ "Referer" = $ref } -UseBasicParsing -TimeoutSec $DefaultTimeout -SessionVariable "Session" $url
+				if ($r -eq $null) {
+					throw "Could not retrieve architectures from server"
+				}
 				if ($Verbosity -ge 5) {
 					Write-Host "=============================================================================="
-					Write-Host $r
+					Write-Host ($r | ConvertTo-Json)
 					Write-Host "=============================================================================="
 				}
-				if ($r -match "errorModalMessage") {
-					$Alt = [regex]::Match($r.Content, '<p id="errorModalMessage">(.+?)<\/p>').Groups[1].Value -replace "<[^>]+>" -replace "\s+", " " -replace "\?\?\?", "-"
-					$Alt = [System.Text.Encoding]::UTF8.GetString([byte[]][char[]]$Alt)
-					if (!$Alt) {
-						$Alt = "Could not retrieve architectures from server"
-					} elseif ($Alt -match "715-123130") {
-						$Alt += " " + $SessionId[$Entry.SessionIndex] + "."
+				if ($r.Errors) {
+					if ( $r.Errors[0].Type -eq 9) {
+						$msg = Get-Code-715-123130-Message
+						throw $msg + $SessionId[$Entry.SessionIndex] + "."
+					} else {
+						throw $r.Errors[0].Value
 					}
-					Throw-Error -Req $r -Alt $Alt
 				}
-				$pattern = '(?s)(<input.*?></input>)'
-				ForEach-Object { [regex]::Matches($r, $pattern) } | ForEach-Object { $html += $_.Groups[1].value }
-				# Need to fix the HTML and JSON data so that it is well-formed
-				$html = $html.Replace("class=product-download-hidden", "")
-				$html = $html.Replace("type=hidden", "")
-				$html = $html.Replace("&nbsp;", " ")
-				$html = $html.Replace("IsoX86", "&quot;x86&quot;")
-				$html = $html.Replace("IsoX64", "&quot;x64&quot;")
-				# As usual Microsoft's left hand is completely uncoordinated with right hand
-				$html = $html.Replace("Unknown", "&quot;ARM64&quot;")
-				$html = "<inputs>" + $html + "</inputs>"
-				$xml = [xml]$html
-				foreach ($var in $xml.inputs.input) {
-					$json = $var.value | ConvertFrom-Json;
-					if ($json) {
-						$links += @(New-Object PsObject -Property @{ Type = $json.DownloadType; Url = $json.Uri })
-					}
+				foreach ($ProductDownloadOption in $r.ProductDownloadOptions) {
+					$links += @(New-Object PsObject -Property @{ Arch = (Get-Arch-From-Type $ProductDownloadOption.DownloadType); Url = $ProductDownloadOption.Uri })
 				}
 				if ($links.Length -eq 0) {
-					Throw-Error -Req $r -Alt "Could not retrieve ISO download links"
+					throw "Could not retrieve ISO download links"
 				}
 			} catch {
 				Error($_.Exception.Message)
@@ -751,7 +715,7 @@ function Get-Windows-Download-Links([int]$SelectedVersion, [int]$SelectedRelease
 		$i = 0
 		$script:SelectedIndex = 0
 		foreach($link in $links) {
-			if ($link.Type -eq $PlatformArch) {
+			if ($link.Arch -eq $PlatformArch) {
 				$script:SelectedIndex = $i
 			}
 			$i++
@@ -921,12 +885,12 @@ if ($Cmd) {
 	$i = 0
 	foreach ($link in $links) {
 		if ($Arch -eq "List") {
-			Write-Host " -" $link.Type
-		} elseif ((!$Arch -and $script:SelectedIndex -eq $i) -or ($Arch -and $link.Type -match $Arch)) {
+			Write-Host " -" $link.Arch
+		} elseif ((!$Arch -and $script:SelectedIndex -eq $i) -or ($Arch -and $link.Arch -match $Arch)) {
 			if (!$Arch -and $Verbosity -ge 1) {
-				Write-Host "No architecture specified (-Arch). Defaulting to '$($link.Type)'."
+				Write-Host "No architecture specified (-Arch). Defaulting to '$($link.Arch)'."
 			}
-			$Selected += ", [" + $link.Type + "]"
+			$Selected += ", [" + $link.Arch + "]"
 			$winLink = $link
 			break;
 		}
@@ -1032,7 +996,7 @@ $Continue.add_click({
 			if ($links.Length -eq 0) {
 				break
 			}
-			$script:Architecture = Add-Entry $Stage "Architecture" $links "Type"
+			$script:Architecture = Add-Entry $Stage "Architecture" $links "Arch"
 			if ($PipeName) {
 				$XMLForm.Height += $dh / 2;
 				$Margin = $Continue.Margin
@@ -1104,8 +1068,8 @@ exit $ExitCode
 # SIG # Begin signature block
 # MIItPAYJKoZIhvcNAQcCoIItLTCCLSkCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDFXTWq2lpU/6fR
-# Ct1W7yWDg6b1THz8JSMDTQ5AW7weJ6CCEkAwggVvMIIEV6ADAgECAhBI/JO0YFWU
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB0klYG7kMpXYlu
+# 6Vmn7G7O3iGdiVPXhDhg2Qn662fa+aCCEkAwggVvMIIEV6ADAgECAhBI/JO0YFWU
 # jTanyYqJ1pQWMA0GCSqGSIb3DQEBDAUAMHsxCzAJBgNVBAYTAkdCMRswGQYDVQQI
 # DBJHcmVhdGVyIE1hbmNoZXN0ZXIxEDAOBgNVBAcMB1NhbGZvcmQxGjAYBgNVBAoM
 # EUNvbW9kbyBDQSBMaW1pdGVkMSEwHwYDVQQDDBhBQUEgQ2VydGlmaWNhdGUgU2Vy
@@ -1207,23 +1171,23 @@ exit $ExitCode
 # MS4wLAYDVQQDEyVTZWN0aWdvIFB1YmxpYyBDb2RlIFNpZ25pbmcgQ0EgRVYgUjM2
 # AhA3xQo8HaADcccNx8YmkC/lMA0GCWCGSAFlAwQCAQUAoHwwEAYKKwYBBAGCNwIB
 # DDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGCNwIBCzEO
-# MAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIJOGS5HWMc2rDXvPKvX2nFz6
-# Kgz3N3nMaspPXtcMKTojMA0GCSqGSIb3DQEBAQUABIICAJ74B4pGm7vaEYuhs3NT
-# DVwFMiBWnu7mul6K6Van7Itz0bECfra3r9wpUvcsAoOKEqZ9VX1AmJ/zoIQhQgq3
-# gPMhbPLeJuIwnjExCLHSwaJ9tXbETIMX50vMBOt6aLsVgnzT2VJTC5UTzvwcW/Lm
-# Gaucxnm1bFMNmTMdeOZFLPZBB+WPaJ3dT2lgNU/usB0DyF+i5ilFPFUzesrMDzcV
-# x+ijkEOz1jxNxXGbTotPvXjMPkUnBIaYsTmeKhrzn085p8O5l0eUAqjEnYPvAq/n
-# WSvpohmXZa3V7pWRum5XPZ2fe4cs6GjMYmdmD+8ovW4G6KVbNkf75JFKJZ82Y9lq
-# qn4VO0r5vV4ffD0erFF/KGTavhvz/VlG2par1O/jfa6ue9yPaLLpWiynThz9/lGI
-# zbvmAGJuIxCjRcA/Dp/QRkl1a8+VvXtaopd3hQTwgHhlXhnOLKzDKuLoJd9CsDPL
-# 0krYSqps1PD7sAdpr4rx4Gkv+iT9vLJYD+N9KSpfW8BmrHKaKp2BnK79ERxo4fQm
-# bagOlVCX/FBmSYU+HW52fb2b9fwS7xVupOoruHiIksjTy7YWNgck3CW4WVKxp35y
-# i6SEO4u+1ivx9uhIYQnDJ4mEcezLU1QBFoc5UG6IW1QgbnYVbBwhlrp/poF90NHp
-# TC2UDXb1m+JfMPdjaOBZdothoYIXOjCCFzYGCisGAQQBgjcDAwExghcmMIIXIgYJ
+# MAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIMda0hrcJMlznUby0JMTJZii
+# YrlB+XbYbN64MDk3LZaPMA0GCSqGSIb3DQEBAQUABIICAKK5L6bwuDw5ehUQPObq
+# jol9xpRSY++pCqutnYyjg+rUWlkbizUiUOCZlUPwKhEOLy84RyhEXHwdVKYovTZE
+# NMODe1cUOuYKmsVuOT6YalqSVx2OZamhwuuniBZZE2oiNskos2MkuzuAi8MIE3Er
+# 3YwzvsFRrEeyr46yxGPGAMdU8oibriANnvhyCuAAg30OeIp8dWU53o51ncjqsuBL
+# uCTdgXcHYHI5g9C/5pgLHHGWf77Gy2XZSnUaquXo1BAaPigmOYO26UIG3/bQ8WhN
+# ahdGCIRU40fJI/WeYCCAS8xc+x6SuyZym49DdKqVwEDzy4bCzzr8x7f8AB/I7sgH
+# yXWU8hKqjCdxtmi68BA0Ab49dVXGW7htMvdGsZH0nETjQBhZoVYttl3VcaCWNTO3
+# IdQiEHA5ikWX3j/Jwo5XP+kodHxFf3PRE0Y1TIDh+RrhiC0tOND8HK4JlHBZZe2o
+# sC+MFC2F7kfAUcFFaMPDIJ2vo/EjOC7fdItEJpVP+sY0CucleMXUHWN+JqT4qGTo
+# zAppkvZdYsN1Btj0vtCbvB3snSRtskkwjcmjWLMuVS8LE9F23uwz7zYhiIU5JT4j
+# htAQ0WP/98991HpLVkOzrFe2yUPKUpOlGXM8EjW+z8bqXeV+plr0Fel7l118gKwi
+# 84aPf60L+QL51ro5wTFweNWkoYIXOjCCFzYGCisGAQQBgjcDAwExghcmMIIXIgYJ
 # KoZIhvcNAQcCoIIXEzCCFw8CAQMxDzANBglghkgBZQMEAgEFADB4BgsqhkiG9w0B
-# CRABBKBpBGcwZQIBAQYJYIZIAYb9bAcBMDEwDQYJYIZIAWUDBAIBBQAEIBw/qIiW
-# ZirjZAJAqvzJLoq2PiAMMR2U/b8N3B7swhynAhEArbB7KWdDox91SH7wp5yr5hgP
-# MjAyNDExMTgwMTQzNDFaoIITAzCCBrwwggSkoAMCAQICEAuuZrxaun+Vh8b56QTj
+# CRABBKBpBGcwZQIBAQYJYIZIAYb9bAcBMDEwDQYJYIZIAWUDBAIBBQAEIKv6jXxT
+# SwYS1e/Id/A50U1BrZQmL4ZM3oinw9cfDogGAhEA4JCHEEKpszHYqo9JnStu0RgP
+# MjAyNDExMTkyMjM3NDJaoIITAzCCBrwwggSkoAMCAQICEAuuZrxaun+Vh8b56QTj
 # MwQwDQYJKoZIhvcNAQELBQAwYzELMAkGA1UEBhMCVVMxFzAVBgNVBAoTDkRpZ2lD
 # ZXJ0LCBJbmMuMTswOQYDVQQDEzJEaWdpQ2VydCBUcnVzdGVkIEc0IFJTQTQwOTYg
 # U0hBMjU2IFRpbWVTdGFtcGluZyBDQTAeFw0yNDA5MjYwMDAwMDBaFw0zNTExMjUy
@@ -1328,20 +1292,20 @@ exit $ExitCode
 # ATB3MGMxCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5jLjE7MDkG
 # A1UEAxMyRGlnaUNlcnQgVHJ1c3RlZCBHNCBSU0E0MDk2IFNIQTI1NiBUaW1lU3Rh
 # bXBpbmcgQ0ECEAuuZrxaun+Vh8b56QTjMwQwDQYJYIZIAWUDBAIBBQCggdEwGgYJ
-# KoZIhvcNAQkDMQ0GCyqGSIb3DQEJEAEEMBwGCSqGSIb3DQEJBTEPFw0yNDExMTgw
-# MTQzNDFaMCsGCyqGSIb3DQEJEAIMMRwwGjAYMBYEFNvThe5i29I+e+T2cUhQhyTV
-# hltFMC8GCSqGSIb3DQEJBDEiBCCLPWAm+aNyc4DrqvDwqzC7ow3BipFMugVd26EO
-# cUUgxTA3BgsqhkiG9w0BCRACLzEoMCYwJDAiBCB2dp+o8mMvH0MLOiMwrtZWdf7X
-# c9sF1mW5BZOYQ4+a2zANBgkqhkiG9w0BAQEFAASCAgA1D9F+ChwLLlPfrnjVN7y8
-# Raa08Q1yJoUiIPZw/m4rknXNCjyL768gux2rys7Y0ofhaTL8qB2U5605DNmkuDAw
-# NwDXME2bka4xBxDJrI43XFVtu3SpKRbNcv5ujZs0jF4gA3GQykM9UahyusmaxwtQ
-# DILavBxCuVye9HX86Z1Bdac1wCWY6hvbtoT4ffm+/Uondgh8VzEWd36ImGOpAXQM
-# +UOR8t4JG5777yIBTv51W3qnEx7e4bazezEXIgC7DdXFSq18ypjJuCkLMrb2bWgp
-# /CxGT2ff4itbsv8Z++oJI2oOewhlLiA5tVMkbB0lVGQbkeEP4nqUKwAvOt7g1i7f
-# uSxGdoNbaesSNefScqii1OTXHsLSjNciRQQJZMxJI44F15X7LOVdaaIbvgoLfIWy
-# T9s+OgUxmAvDdZKpRcHO//tW6JqFCoi+gdW04mUSvME+MRx6RFZe1cjZNPpJEnwh
-# kmKGhndTmaBjg1nJH0okrfmR87jjIhulemrdJsUZtcdzCBxT1gW5AaHFOMUuHBkR
-# P9h0VG3f12fejgEotaDyTmPYBazFlwSrXtrr1uFmS0SDw681z5xGjK92279MlUpo
-# 8RBOupy5LSPC59Oi1j7SSeW+xyBfS+0aiyKEAYfk1qO0f3Eql9kTQBZjaizDdKmq
-# ubbhLFZ/dE5qax8nkz2Rxw==
+# KoZIhvcNAQkDMQ0GCyqGSIb3DQEJEAEEMBwGCSqGSIb3DQEJBTEPFw0yNDExMTky
+# MjM3NDJaMCsGCyqGSIb3DQEJEAIMMRwwGjAYMBYEFNvThe5i29I+e+T2cUhQhyTV
+# hltFMC8GCSqGSIb3DQEJBDEiBCDJR/9SrHl3jTtyDm/69Jj4rIadIbkK8kPggAhw
+# EixSTDA3BgsqhkiG9w0BCRACLzEoMCYwJDAiBCB2dp+o8mMvH0MLOiMwrtZWdf7X
+# c9sF1mW5BZOYQ4+a2zANBgkqhkiG9w0BAQEFAASCAgBCDEmF9G2nc30BRigzIqkp
+# 6C2LwvDVD4WP2lP7iodnfh0xJOH/mjtUhM5nN3mrl+g6njdSfQ0XSWTWFPktkB5K
+# 4MfaSNY53ZBBJ7e2rx6TCcDCi8AHi8NvszFFQR6V2rtLxdwcbiRYcny0pW0oOnC7
+# tFIbswA+bIfeOfakPxRWCSjYIalNZF07F0LrsTZwD1ZbZhJzbL97KSr/IgZWeZlH
+# D55hGgtKUtXW/4lv55fO/Uv6HctZgD2HCwrt5pvRa4kWPM8h3D5ZMUpijqVzfiCJ
+# G6gxArYx5fE89+/BiKGf8F7DJQxDTdcy1lLOFR3RhcYrEg1g3acQBDCc/tGnEeSS
+# D7HDLUnzHq3VQ47Wm8MjLhL2e5myE+Jiy9TaQB67GHKtUAc4JlO8Ct6H2XkWk003
+# 3gyNGsfK3PZsmG7syNgFz7lI+mCycqReACkV62IvFz+mVXCjCBGS80R2traxFSso
+# TerPqC4VwGD9wgwrdXF1bzzOEv7zaV3k+XnrJqRG4ZY53no04ggttROT/HFBvthh
+# wcUcFA17tYgMVosai1DNxJR+E+ioE+JoRJlCcfoGBcUi0D5G7NArraA/Hx97gMC3
+# SMKHS4pToqOvXa3cg+GfQNXTjouKOQY86Bb1fx/Chjx84MRY1gzcTaZ5w+/CFpmH
+# TTLfnQjpTLMeIpYWm0g7Eg==
 # SIG # End signature block
