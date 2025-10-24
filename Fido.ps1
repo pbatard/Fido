@@ -496,13 +496,129 @@ $QueryLocale = $Locale
 # Convert a size in bytes to a human readable string
 function Size-To-Human-Readable([uint64]$size)
 {
-	$suffix = "bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"
-	$i = 0
-	while ($size -gt 1kb) {
-		$size = $size / 1kb
-		$i++
-	}
-	"{0:N1} {1}" -f $size, $suffix[$i]
+        $suffix = "bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"
+        $i = 0
+        while ($size -gt 1kb) {
+                $size = $size / 1kb
+                $i++
+        }
+        "{0:N1} {1}" -f $size, $suffix[$i]
+}
+
+# Extract potential SHA-256 hashes from a response object.
+function Get-Hash-CandidatesFromResponse
+{
+        param(
+                [Parameter(Mandatory = $true)]
+                [object]$Object
+        )
+
+        $results = @()
+
+        if ($null -eq $Object) {
+                return ,$results
+        }
+
+        if ($Object -is [string]) {
+                if ($Object -match '^[A-Fa-f0-9]{64}$') {
+                        return ,$Object.ToUpperInvariant()
+                }
+                return ,$results
+        }
+
+        if ($Object -is [System.Collections.IDictionary]) {
+                foreach ($key in $Object.Keys) {
+                        $value = $Object[$key]
+                        if ($value -is [string]) {
+                                if (($key -match '(?i)sha256') -or ($key -match '(?i)hash')) {
+                                        if ($value -match '^[A-Fa-f0-9]{64}$') {
+                                                $results += $value.ToUpperInvariant()
+                                                continue
+                                        }
+                                }
+                        }
+                        $results += Get-Hash-CandidatesFromResponse $value
+                }
+                return ,$results
+        }
+
+        if ($Object -is [psobject]) {
+                foreach ($prop in $Object.PSObject.Properties) {
+                        $value = $prop.Value
+                        if ($value -is [string]) {
+                                if (($prop.Name -match '(?i)sha256') -or ($prop.Name -match '(?i)hash')) {
+                                        if ($value -match '^[A-Fa-f0-9]{64}$') {
+                                                $results += $value.ToUpperInvariant()
+                                                continue
+                                        }
+                                }
+                        }
+                        $results += Get-Hash-CandidatesFromResponse $value
+                }
+                return ,$results
+        }
+
+        if ($Object -is [System.Collections.IEnumerable]) {
+                foreach ($item in $Object) {
+                        $results += Get-Hash-CandidatesFromResponse $item
+                }
+        }
+
+        return ,$results
+}
+
+# Compare a SHA-256 hash with the reference database hosted by msdn.rg-adguard.net.
+function Compare-Hash-WithDatabase
+{
+        param(
+                [Parameter(Mandatory = $true)][string]$FileName,
+                [Parameter(Mandatory = $true)][string]$Sha256Hash
+        )
+
+        $sha256Upper = $Sha256Hash.ToUpperInvariant()
+        $encodedFileName = [System.Uri]::EscapeDataString($FileName)
+        $endpoints = @(
+                "https://msdn.rg-adguard.net/api/v1/file/$encodedFileName",
+                "https://msdn.rg-adguard.net/api/v1/search?query=$encodedFileName",
+                "https://msdn.rg-adguard.net/api/v1/list?search=$encodedFileName"
+        )
+
+        foreach ($endpoint in $endpoints) {
+                try {
+                        if ($Verbosity -ge 2) {
+                                Write-Host "Querying verification endpoint: $endpoint"
+                        }
+                        $response = Invoke-RestMethod -UseBasicParsing -TimeoutSec $DefaultTimeout -Uri $endpoint -Method Get -ErrorAction Stop
+                } catch {
+                        if ($Verbosity -ge 2) {
+                                Write-Host "Verification request failed for $endpoint: $($_.Exception.Message)"
+                        }
+                        continue
+                }
+
+                if (!$response) {
+                        continue
+                }
+
+                $candidates = Get-Hash-CandidatesFromResponse $response
+                if ($candidates.Count -eq 0) {
+                        continue
+                }
+
+                if ($candidates -contains $sha256Upper) {
+                        Write-Host "Verification succeeded: SHA-256 hash matches msdn.rg-adguard.net entry."
+                        return 0
+                }
+
+                Write-Host "ERROR: SHA-256 hash does not match msdn.rg-adguard.net database."
+                if ($Verbosity -ge 1) {
+                        Write-Host "Known hashes for $FileName: $($candidates -join ', ')"
+                }
+                return 2
+        }
+
+        Write-Host "Warning: No reference hash available from msdn.rg-adguard.net for $FileName."
+        return 1
 }
 
 # Check if the locale we want is available - Fall back to en-US otherwise
@@ -751,20 +867,39 @@ function Process-Download-Link([string]$Url)
 		if ($PipeName -and !$Check.IsChecked) {
 			Send-Message -PipeName $PipeName -Message $Url
 		} else {
-			if ($Cmd) {
-				$pattern = '.*\/(.*\.iso).*'
-				$File = [regex]::Match($Url, $pattern).Groups[1].Value
-				# PowerShell implicit conversions are iffy, so we need to force them...
-				$str_size = (Invoke-WebRequest -UseBasicParsing -TimeoutSec $DefaultTimeout -Uri $Url -Method Head).Headers.'Content-Length'
-				$tmp_size = [uint64]::Parse($str_size)
-				$Size = Size-To-Human-Readable $tmp_size
-				Write-Host "Downloading '$File' ($Size)..."
-				Start-BitsTransfer -Source $Url -Destination $File
-			} else {
-				Write-Host Download Link: $Url
-				Start-Process -FilePath $Url
-			}
-		}
+                        if ($Cmd) {
+                                $pattern = '.*\/(.*\.iso).*'
+                                $File = [regex]::Match($Url, $pattern).Groups[1].Value
+                                # PowerShell implicit conversions are iffy, so we need to force them...
+                                $str_size = (Invoke-WebRequest -UseBasicParsing -TimeoutSec $DefaultTimeout -Uri $Url -Method Head).Headers.'Content-Length'
+                                $tmp_size = [uint64]::Parse($str_size)
+                                $Size = Size-To-Human-Readable $tmp_size
+                                Write-Host "Downloading '$File' ($Size)..."
+                                $destinationPath = [System.IO.Path]::GetFullPath($File)
+                                Start-BitsTransfer -Source $Url -Destination $destinationPath
+                                if (!(Test-Path -LiteralPath $destinationPath)) {
+                                        throw "Download failed for $File"
+                                }
+                                $hashInfo = Get-FileHash -Algorithm SHA256 -LiteralPath $destinationPath
+                                $sha256 = $hashInfo.Hash.ToUpperInvariant()
+                                Write-Host "SHA-256 hash: $sha256"
+                                $verificationResult = Compare-Hash-WithDatabase -FileName $File -Sha256Hash $sha256
+                                switch ($verificationResult) {
+                                0 {
+                                        # Already handled through console message
+                                }
+                                1 {
+                                        Write-Host "Verification skipped: reference hash not available."
+                                }
+                                2 {
+                                        return 409
+                                }
+                                }
+                        } else {
+                                Write-Host Download Link: $Url
+                                Start-Process -FilePath $Url
+                        }
+                }
 	} catch {
 		Error($_.Exception.Message)
 		return 404
