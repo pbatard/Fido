@@ -1,5 +1,5 @@
 ﻿#
-# Fido v1.68 - ISO Downloader, for Microsoft Windows and UEFI Shell
+# Fido v1.69 - ISO Downloader, for Microsoft Windows and UEFI Shell
 # Copyright © 2019-2026 Pete Batard <pete@akeo.ie>
 # Command line support: Copyright © 2021 flx5
 # ConvertTo-ImageSource: Copyright © 2016 Chris Carter
@@ -159,6 +159,11 @@ $WindowsVersions = @(
 	)
 	@(
 		@("UEFI Shell 2.2", "UEFI_SHELL 2.2"),
+		@(
+			"26H1 (edk2-stable202602)",
+			@("Release", 0),
+			@("Debug", 1)
+		),
 		@(
 			"25H2 (edk2-stable202511)",
 			@("Release", 0),
@@ -668,26 +673,35 @@ function Get-Windows-Languages([int]$SelectedVersion, [object]$SelectedEdition)
 				Write-Host Querying $url
 			}
 			try {
-				$r = Invoke-RestMethod -UseBasicParsing -TimeoutSec $DefaultTimeout -SessionVariable "Session" $url
-				if ($r -eq $null) {
-					throw "Could not retrieve languages from server"
-				}
-				if ($Verbosity -ge 5) {
-					Write-Host "=============================================================================="
-					Write-Host ($r | ConvertTo-Json)
-					Write-Host "=============================================================================="
-				}
-				if ($r.Errors) {
-					throw $r.Errors[0].Value
-				}
-				foreach ($Sku in $r.Skus) {
-					if (!$languages.Contains($Sku.Language)) {
-						$languages[$Sku.Language] = @{ DisplayName = $Sku.LocalizedLanguage; Data = @() }
+				# May require a few attempts.
+				$attempt = 0;
+				while ($true) {
+					if ($attempt -ne 0) { Start-Sleep -Seconds 2 }
+					$r = Invoke-RestMethod -UseBasicParsing -TimeoutSec $DefaultTimeout -SessionVariable "Session" $url
+					if ($r -eq $null) {
+						if ($attempt++ -le 1) { continue }
+						throw "Could not retrieve languages from server"
 					}
-					$languages[$Sku.Language].Data += @{ SessionIndex = $SessionIndex; SkuId = $Sku.Id }
-				}
-				if ($languages.Length -eq 0) {
-					throw "Could not parse languages"
+					if ($Verbosity -ge 5) {
+						Write-Host "=============================================================================="
+						Write-Host ($r | ConvertTo-Json)
+						Write-Host "=============================================================================="
+					}
+					if ($r.Errors) {
+						if ($attempt++ -le 1) { continue }
+						throw $r.Errors[0].Value
+					}
+					foreach ($Sku in $r.Skus) {
+						if (!$languages.Contains($Sku.Language)) {
+							$languages[$Sku.Language] = @{ DisplayName = $Sku.LocalizedLanguage; Data = @() }
+						}
+						$languages[$Sku.Language].Data += @{ SessionIndex = $SessionIndex; SkuId = $Sku.Id }
+					}
+					if ($languages.Length -eq 0) {
+						if ($attempt++ -le 1) { continue }
+						throw "Could not parse languages"
+					}
+					break;
 				}
 			} catch {
 				Error($_.Exception.Message)
@@ -1142,8 +1156,8 @@ exit $ExitCode
 # SIG # Begin signature block
 # MIIteAYJKoZIhvcNAQcCoIItaTCCLWUCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB1dtbxSI71NO7p
-# SjiPlVZveiiexFLEwtNoEZ6KLHZtBKCCEkAwggVvMIIEV6ADAgECAhBI/JO0YFWU
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDXxwqFQe5xW86J
+# EJEwCZ5i7/F9Quz1+UVh86bzDD0Ep6CCEkAwggVvMIIEV6ADAgECAhBI/JO0YFWU
 # jTanyYqJ1pQWMA0GCSqGSIb3DQEBDAUAMHsxCzAJBgNVBAYTAkdCMRswGQYDVQQI
 # DBJHcmVhdGVyIE1hbmNoZXN0ZXIxEDAOBgNVBAcMB1NhbGZvcmQxGjAYBgNVBAoM
 # EUNvbW9kbyBDQSBMaW1pdGVkMSEwHwYDVQQDDBhBQUEgQ2VydGlmaWNhdGUgU2Vy
@@ -1245,23 +1259,23 @@ exit $ExitCode
 # MS4wLAYDVQQDEyVTZWN0aWdvIFB1YmxpYyBDb2RlIFNpZ25pbmcgQ0EgRVYgUjM2
 # AhA3xQo8HaADcccNx8YmkC/lMA0GCWCGSAFlAwQCAQUAoHwwEAYKKwYBBAGCNwIB
 # DDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGCNwIBCzEO
-# MAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEII294xnKlxANHBu2tvimfevz
-# QJqK5wCkNZQhXg6EpkW0MA0GCSqGSIb3DQEBAQUABIICAB1iDg7emj2kT1B9y6ZJ
-# RZ5n3DXh+Gg5HKqMed5qd8YowmRiHPgjAzwWe6P7mmJlEvtmbELdo2/nCfxlpU1y
-# 7ajlCcnGm+jcF/L0/UzLtc+VOpulivKJTLzg+f1vPdAsNmzZtSg5WbCauhh+KvYG
-# zUSktXygBgC08YbiA1aagSGCuIqvhJhO25yz96j5iXQhIZLiZHuSbgl6ZGs/miId
-# cZIqBlTJprRQ/YvO/6hVgPx1mEvdqBy6ZUBFaeR3sL0K3+dZCoZDkoVgNxjPhtaV
-# UvPisyociCVrwdOpjYT1rLI7dVXxG1giOfdIdsvHDJSbX5x+vFroMB3tQ7O65tAW
-# dF+2ZtvgDp6UdjysojiKzPRI4ZdBWu1RKKm/khsArZnVBTnrkOuT5ErMYfKgrled
-# sWdyoIHdUzwBHtOZ5jVVUZxjZ+uRdujpcUbKAeWJNU0rJaeKK2st5SZfoN7PAR0V
-# YULTcsi5qS74ExvDp61q6t4An8Ivdysx7BjrY8tYOqy1BL2KtHtr99GAbDxkyTUg
-# NOYEKhqXrLhJ/MEGW1SX5RDUbqmoSKdM9KN65vYzxAbUSEm9Srv/9DacAX6V0KVb
-# P3xN0yGcGTD07211lZVus0G0wOBts3ejYa6VdR2oFGT7XbVKInq60gsc/9y3CMbn
-# HX10NIIGIczSgTGhXGEP3ts0oYIXdjCCF3IGCisGAQQBgjcDAwExghdiMIIXXgYJ
+# MAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIA43JqiFG1pUsW+VWG66vNSe
+# WesQeLIJDvPNjARLSjVJMA0GCSqGSIb3DQEBAQUABIICAI/rQjgUfZ9bWfkmeR+B
+# EeezCi04TCBW9ngtWAeSqGW8k2qdm2H3uoyPqO/78QwNHpKDi33VDXUmh+hGql9K
+# pmfpVVP6dKvG5EQdclGYcP/sK7f77+EGZL7BGP08MP2k6NXvEAPvpvmJST2v3cM+
+# hktF0wQD8s/BWE3/FgrKUJMwIeG15ZQ1KG00xFXJjMl+CDpedNheeg46eU1iSe1R
+# wPsCh+MYw7Mu/31h1AAEu2gmVBmp23+CYaoSOfdQFfC4Pa2phg7e3UUVa5TAwfrX
+# KlWunPbh4U5reMa+1Z8vKGYAOOGw2/wDiI3Kg5dGczOxPvQBNGYjrovYW9DD0E1w
+# ev5VtzLjmvQWjHg6Vp64JIcOmEQEcThZ/GUPDoS9SQfUpv9/a4siuHmiFhmX+Y0z
+# ANVClEqN7/AW1C9c1LgWdxSZilENds8SS3BrFVDW/8ayvVEUHOLJLvux9anRgZP8
+# IDosOS+rY6T2+S0eGg69rGxwDmtVgEA8N2Ev7odXEkxPB9+UWrtnwSa4LTd3Y6rZ
+# ucL8MngWdNGMfXCKqlrRpK6SBNRtzxbFj7fZwAT2X6oOXieNLNcLvX5wKc9Vv1Vu
+# mntM0SzZUKXin6CWgtpl6MBFy+hNNM2iazm/WXSUyC7AQEPdoYTlmahOFTOABhJK
+# H6w2jf+SzXOpUwUe38vEX0tMoYIXdjCCF3IGCisGAQQBgjcDAwExghdiMIIXXgYJ
 # KoZIhvcNAQcCoIIXTzCCF0sCAQMxDzANBglghkgBZQMEAgEFADB3BgsqhkiG9w0B
-# CRABBKBoBGYwZAIBAQYJYIZIAYb9bAcBMDEwDQYJYIZIAWUDBAIBBQAEIF1ETvvL
-# QCdZF7O30x7x/Ai+Fh/pbIhey1FGc6XZYYjPAhAwhmXImjSup3iskTx2z/ccGA8y
-# MDI2MDIxNjE1MzQxNVqgghM6MIIG7TCCBNWgAwIBAgIQCoDvGEuN8QWC0cR2p5V0
+# CRABBKBoBGYwZAIBAQYJYIZIAYb9bAcBMDEwDQYJYIZIAWUDBAIBBQAEII+chtKC
+# FdhcHUp7wTlYBcSyaAed68xF7aTBmMLNlxxnAhAVhSZL8NVuXAVE4r+F6WQ8GA8y
+# MDI2MDIyNzE2NTIyMVqgghM6MIIG7TCCBNWgAwIBAgIQCoDvGEuN8QWC0cR2p5V0
 # aDANBgkqhkiG9w0BAQsFADBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNl
 # cnQsIEluYy4xQTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1w
 # aW5nIFJTQTQwOTYgU0hBMjU2IDIwMjUgQ0ExMB4XDTI1MDYwNDAwMDAwMFoXDTM2
@@ -1368,19 +1382,19 @@ exit $ExitCode
 # LjFBMD8GA1UEAxM4RGlnaUNlcnQgVHJ1c3RlZCBHNCBUaW1lU3RhbXBpbmcgUlNB
 # NDA5NiBTSEEyNTYgMjAyNSBDQTECEAqA7xhLjfEFgtHEdqeVdGgwDQYJYIZIAWUD
 # BAIBBQCggdEwGgYJKoZIhvcNAQkDMQ0GCyqGSIb3DQEJEAEEMBwGCSqGSIb3DQEJ
-# BTEPFw0yNjAyMTYxNTM0MTVaMCsGCyqGSIb3DQEJEAIMMRwwGjAYMBYEFN1iMKyG
-# Ci0wa9o4sWh5UjAH+0F+MC8GCSqGSIb3DQEJBDEiBCAROkPGEvLcoCA4oIHK59Hp
-# TW3+avNGAWkzvkXbV2i7EjA3BgsqhkiG9w0BCRACLzEoMCYwJDAiBCBKoD+iLNdc
-# hMVck4+CjmdrnK7Ksz/jbSaaozTxRhEKMzANBgkqhkiG9w0BAQEFAASCAgAPiz7y
-# 1GJTY/Qkv2QBqTz1wCpn9tP+6GWU4ENS0CLFueRklgCbuY36ZOt24Zh09ScHUKAJ
-# am+xPP0uyfdmj1qwkrJR9JI6H2sCrPprB8jEbUFnRDroG+guP15PDZCPUnWp/gMp
-# h2RxYn8hzvb1kkzoj1rhTpJus6Mh1rPdJVa0s/2zun0pXLBHwERFYTOm9Omqf61a
-# UcYnYWz6XIDHnbZZlZ2VabnbPCqreIR87Z9h9S4So9jIHQAOVunkio1G7VKsHsxq
-# qJIPul8K0vAeFo/Wn/yhGe+OSFgzgb0hrtH8gCYCUyaTTpsTqWXdR4TKtNwGtybk
-# QlT0Tj8cm9eXEbqxRKJpaJqQVA39ugfzoPbsGgJzfLrP52r4rAN7Sk7c2ERAdHlR
-# Zv2Td7sQz1tbiB+NRQnz/hKbXN0amcikecq2yOMHJVCXvQyvfSh/Fp3QCFcmwxzM
-# 4uBpKtwYkchRmPbpCn8U6F5qW8YXzJpoHuQkwBGNEG0G+rZlQja4qEnNW9tv2NAr
-# N1MB6OIWUexpWpGsI0gNGp0Bs+bOwHRdQMlH+pw4ut7I3oHbnu4b0dBK0Kz8cQoh
-# L8LYVZ0Lf5vCl55XU2OYNLD9p8FcuupaTUI2ounYSPa3cozcHFQ3ij7eWB8iUP1q
-# kSJ49Ctd2AzLw89SR8X/ljKfrbU5fmQN5V2WVw==
+# BTEPFw0yNjAyMjcxNjUyMjFaMCsGCyqGSIb3DQEJEAIMMRwwGjAYMBYEFN1iMKyG
+# Ci0wa9o4sWh5UjAH+0F+MC8GCSqGSIb3DQEJBDEiBCAJa2JEShvGrD+39nfdQTTr
+# fD9A3SWsz/cALhUAmmbGSjA3BgsqhkiG9w0BCRACLzEoMCYwJDAiBCBKoD+iLNdc
+# hMVck4+CjmdrnK7Ksz/jbSaaozTxRhEKMzANBgkqhkiG9w0BAQEFAASCAgB3zxNK
+# VkbNAa44aabbeTbZ2+lx4tNGpHYfAf1oz7P3rl6GwDAxDwD9Pm9NvJiCVa8cUsbO
+# VuzhJXgdFU6ZHaVQn6CXaAB4V/w51mVz7mXCu+uls4qHGByO2+EW+f0D1ywiSmKE
+# 9kLtS0KKQRBrX46ULMpZfokHVPT5ngur/dbXweWkQkusbaxHIJNBMh7aFnqSk42p
+# vhsM4r2tS8GGYT5HhFHCx6ZFVUZHQ+JYbCyxmxnTVIAdeiTsBaM3tgkUyr2Aku5D
+# 4yb8UBWBuAsOeI/16p4SKI/TOO3Z/p9AinqdXLrNQ96UMA/BiPMrO/v2G0ZQhye9
+# SCImSsNK3IOCPdVkP3adjL7trymYPu27VA1YCHDe91Dhu8u77hSwQCc+5HtepJ9E
+# 7OXOtHLNljNjRAd/jpIE/WLPgcadMOzwj8IkUOFVK20IrZZVxqhBma11sg1VqFMu
+# GAJBDf61o1JwSr4lqUn44R+ZZWhr1jAaO/aibWMX+r1VJ3TqXLKW+Uy3XCXGZzR1
+# f0+FbC0ufTkceGDB4NoAJCOm/W1Ukmj4tew6S9oKGdI26kxAXLc1qOZwH4WpTicl
+# yjVHxpC9kh/YeOGzdXpR8Me6rkWJq9YIItRb2AfGgxeY1AKAH9nG8R4Ue48UGROa
+# cgv9uzgXL6m8sNv+Uy7woE1dEuBv7WbFQVRhpQ==
 # SIG # End signature block
